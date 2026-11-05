@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; base-uri 'self'; form-action 'self'">
+<title>AstroVault</title><meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="style.css?v=1"></head>
+<body><main>
+<noscript>AstroVault needs JavaScript.</noscript>
+<header><h1><a class="logo" href="#/shop"><img src="icon-192.png" alt="" width="32" height="32"><span id="brand">AstroVault</span></a></h1>
+<div class="hr"><button id="balchip" class="chip hide" data-go="wallet"></button><button id="acct" class="chip" data-a="login">Log in</button></div></header>
+<div id="app"></div>
+<footer id="foot"><a href="#" data-a="about">About</a> · <a href="#" data-a="terms">Terms</a> · <a href="#" id="contact" target="_blank" rel="noopener">Contact</a></footer>
+<div id="pop" role="status"></div>
+<div id="md" class="md hide" role="dialog" aria-modal="true"><div id="mb" class="box mb"></div></div>
+</main>
+<nav id="bbar" class="bb"></nav>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="mascot.js"></script>
+<script src="app.js"></script>
+</body></html>
