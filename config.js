@@ -1,7 +1,7 @@
 // ===== EDIT THESE (then see README / NEXT_STEPS.md) =====
 window.AV_CONFIG={
-  SUPABASE_URL:"https://YOUR-PROJECT.supabase.co",
-  SUPABASE_KEY:"YOUR-PUBLISHABLE-OR-ANON-KEY",   // publishable/anon key ONLY. Never the service_role key.
+  SUPABASE_URL:"https://skybcnisgohyrubgduqb.supabase.co",
+  SUPABASE_KEY:"skybcnisgohyrubgduqb",   // publishable/anon key ONLY. Never the service_role key.
   BRAND:"AstroVault", CUR:"$",
   CONTACT:{label:"@axtroviii",url:"https://instagram.com/axtroviii"},
   CATEGORIES:[{id:"ai",label:"AI Tools"},{id:"entertainment",label:"Entertainment"},{id:"productivity",label:"Productivity"}],
