@@ -4,15 +4,15 @@
 --  The SQL Editor runs as the database owner, so these bypass RLS on purpose. Edit the <placeholders>.
 -- =====================================================================================
 
--- 1) Make yourself admin (sign up on the site first, then run this once). Shows an Admin tab on the site.
-update public.profiles set is_admin = true where email = 'you@example.com';
+-- 1) Make yourself OWNER (sign up on the site first, then run this once). A Staff tab appears. Run schema_v2.sql first.
+update public.profiles set role = 'owner' where email = 'you@example.com';   -- roles: customer, agent, admin, coowner, owner
 -- Remove admin rights:
--- update public.profiles set is_admin = false where email = 'someone@example.com';
+-- update public.profiles set role = 'customer' where email = 'someone@example.com';
 
 -- 2) Orders waiting for you (oldest first)
 select o.created_at, p.username, p.email, o.product_name, o.price, o.buyer_input, o.id as order_id
 from public.orders o join public.profiles p on p.id = o.user_id
-where o.status = 'pending'
+where o.status in ('pending','processing')
 order by o.created_at;
 
 -- 3) Top-ups waiting for you

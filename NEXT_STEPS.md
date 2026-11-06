@@ -1,38 +1,51 @@
-# NEXT_STEPS.md  (handoff note: read this first)
+# NEXT_STEPS.md  (handoff: read first). Full tutorial: the "AstroVault Build Guide" Word/Doc.
 
-Project: **AstroVault**, a digital-subscription shop built from the AstroLingo codebase (kept: Astro look, Supabase auth,
-sheets/modals/tab bar, motion; removed: all language learning, audio, quizzes, AI chat, ~1.3 MB of data files).
-Static site, no build step, vanilla JS. Host on GitHub Pages / Vercel / Netlify. All money logic is in Postgres.
+AstroVault = digital-subscription shop built from AstroLingo (kept: Astro look, Supabase auth, sheets/tab bar/motion).
+Static site, no build step, vanilla JS. All money + permission logic is in Postgres (supabase/*.sql).
 
-## Status
-DONE and smoke-tested in a browser with a mocked Supabase (UI flow only):
-- index.html, style.css, config.js, mascot.js, app.js (auth, shop, product sheet, 2-step checkout, wallet + top-up request,
-  orders + credentials copy, account/theme, admin: orders / top-ups / products + stock / user balance), sw.js, manifest.
-- supabase/schema.sql (tables, RLS, atomic `purchase()`, top-ups, admin RPCs), seed.sql, admin-helpers.sql.
+## What exists (v2)
+- Roles: customer < agent < admin < coowner < owner. Owner untouchable; you can only manage roles below yours.
+- Shop with categories (AI, Entertainment, Productivity, Games), coming-soon products (checkout says "Coming soon", never charges).
+- Wallet + proof-based top-ups (sender name, unique transaction ID, screenshot in private `proofs` bucket) verified by staff.
+- Orders: pending -> processing -> completed | cancelled (refund). Order numbers #AV-1001. Staff can place orders for customers.
+- Support: tickets + live chat (Realtime + 12s poll). Claim -> auto "Hello <customer>, my name is <agent>" message.
+- Notifications: in-app bell + email outbox (`notifications.email`), sent by Edge Function supabase/functions/send-emails.
+- Staff console (staff.js): Queue, Orders, Top-ups, Products, Users, Team(+audit log), Payments (owner only).
+- Payment methods live in DB table payment_methods (owner edits in app; no redeploy).
 
-NOT verified: **schema.sql has never been executed** (no Postgres was available). Run it on a fresh Supabase project first
-and fix any error before anything else. Then test with two browsers: buy the last stock unit at the same time.
+## v4 additions (audit pass)
+- legal.js: About/Terms/Refunds/Privacy/FAQ modals (DEFAULT TEXT, owner must review; not legal advice). Signup requires consent checkbox (stored as user metadata terms_accepted_at).
+- staff.js Overview tab (admin+): sales today/30d, wallet liabilities, overdue orders/top-ups/tickets, launch checklist.
+- Shop: live search, trust strip, manual-order ETA (config ETA_MANUAL). Balance chip refreshes when a notification arrives (support.js).
+- Password-reset email keeps the default link template ({{ .ConfirmationURL }}); only Confirm signup + Magic Link use {{ .Token }}.
 
-## Setup (owner)
-1. New Supabase project (do NOT reuse the AstroLingo one). SQL Editor: run schema.sql, then optionally seed.sql.
-2. config.js: paste Project URL + publishable/anon key (never service_role). Set CONTACT and TOPUP methods (usdt address / link url).
-3. Auth > Email template "Confirm signup": include `{{ .Token }}` (the site uses the 6-digit code flow). Add the site URL to Auth > URL config.
-4. Sign up on the site, then run in SQL Editor: `update profiles set is_admin=true where email='you@example.com';`
-5. Edit placeholder prices/stock (Admin > Products), delete the DEMO stock lines, replace About/Terms text in app.js.
+## Run order (owner)  (then schema_v3.sql: product delete)
+1. NEW Supabase project -> SQL Editor: schema.sql, then schema_v2.sql, then seed.sql (seed = all "coming soon" templates).
+2. config.js: Project URL + publishable key (never service_role).
+3. Auth email template "Confirm signup" must contain {{ .Token }}. Add site URL in Auth > URL config.
+4. Sign up on the site; SQL: `update public.profiles set role='owner' where email='you@example.com';`
+5. Staff > Payments: set your wallet/bank details. Staff > Products: real prices + stock, "Go live".
+6. Emails: Resend account + domain; `supabase functions deploy send-emails`; secrets RESEND_API_KEY, FROM_EMAIL, SITE_URL, WEBHOOK_SECRET;
+   Database > Webhooks: notifications INSERT -> function with header x-webhook-secret.
 
-## TODO for the next session (priority order)
-1. Run schema.sql against real Supabase; fix errors; test purchase / refund / top-up approve / double-click / two-tab race.
-2. Real payment hook: Supabase Edge Function webhook that calls `_wallet_apply(user, amount,'topup',note,null,null,provider_txn_id)`
-   with the service_role key (`external_ref` is unique, so replays are harmless). Needs a function grant for service_role.
-3. Admin: edit existing product (only create/hide exists), void single stock rows, order search, user ledger view.
-4. Branding: icons and mascot hoodie still say "20/80" (AstroLingo). Replace icon-192/512 + apple-touch-icon; drop `logo` pose already removed.
-5. Hardening: vendor supabase-js locally or add an SRI hash (CDN script is unpinned by integrity); rate limits; email on order status change.
-6. Real Terms / Privacy text (placeholders now). Providers' ToS often forbid resale/shared accounts: keep refund/replacement policy clear.
+## STATUS / VERIFIED
+- JS: syntax-checked; browser-tested with a MOCKED Supabase as customer and owner (all screens, chat XSS escaping, coming-soon flow): no errors.
+- SQL (schema.sql, schema_v2.sql): NEVER EXECUTED (no Postgres available). First task: run both on a real project, fix errors.
+  Likely spots: storage.objects policies (need to run as project owner), `alter table orders add column ... generated always as identity`,
+  realtime publication block, role grants DO-block.
+- Edge Function: never deployed/tested.
 
-## Design decisions (do not undo without thinking)
-- Browser has NO write access to profiles/orders/ledger. Only SECURITY DEFINER RPCs change money; each checks auth.uid()/is_admin().
-- `purchase()` locks the wallet row, uses `FOR UPDATE SKIP LOCKED` on stock, takes a `p_request_id` idempotency key, and a
-  `p_expected_price`. Client sends a fresh uuid per confirm screen and reuses it on retry.
-- Removed AstroLingo's `email_for_username` RPC (it let anyone look up an account's email by username). Login is email-only.
-- Credentials are stored as plain text in `inventory_stock.payload` / `orders.delivery` (RLS-protected). Consider Vault/pgsodium later.
-- User deletion cascades to orders/ledger (privacy-friendly, but loses accounting rows).
+## TODO (priority)
+1. Execute SQL on real Supabase; test: two-tab last-stock race, top-up verify, refund, claim race, role rules, storage proof upload/view.
+2. Real payment provider webhook -> `_wallet_apply(user, amt,'topup',note,null,null,provider_txn_id)` using service_role in an Edge Function.
+3. (DONE v3: full product edit/delete, stock list+delete.) Still: search for orders/tickets, round-robin ticket assignment (assign_ticket RPC exists, no UI).
+4. Ideas not built: store-closed/maintenance switch, coupons, Google login button, refund-request button, order search. Icons + mascot hoodie still say "20/80" (AstroLingo). Real Terms/Privacy/refund text (placeholders in app.js `terms`/`about`).
+5. Hardening: vendor supabase-js or add SRI; rate limits; staff 2FA; cleanup of orphan proof uploads.
+6. Providers' ToS often forbid resale/shared accounts: keep refund/replacement policy visible.
+
+## Design decisions (don't undo casually)
+- Browser has no write access to profiles/orders/ledger/tickets/notifications: only SECURITY DEFINER RPCs, each checks auth.uid()/rank.
+- Agents see names on tickets (snapshotted), not customer emails/balances.
+- Only owner can edit payment methods (a hacked admin can't redirect money). Every sensitive action -> audit_log.
+- Login is email-only (old username->email lookup removed: it leaked emails).
+- Code layout: app.js core + window.AV plug-in API; support.js / staff.js register views (V), clicks (act) and forms (form).
