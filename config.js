@@ -1,6 +1,6 @@
 // ===== EDIT THESE (then see README / NEXT_STEPS.md) =====
 window.AV_CONFIG={
-  SUPABASE_URL:"https://YOUR-PROJECT.supabase.co",
+  SUPABASE_URL:"https://qakwtemwdnsdbcuwkozo.supabase.co",
   SUPABASE_KEY:"sb_publishable_p1vVrG-YD2JUy1K5QS7CsQ_IqULWj_T",   // publishable/anon key ONLY. Never the service_role key.
   BRAND:"AstroVault", CUR:"$", ETA_MANUAL:"usually within a few hours",   // ETA_MANUAL is shown on "on request" products
   CONTACT:{label:"@axtroviii",url:"https://instagram.com/axtroviii"},
