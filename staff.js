@@ -1,5 +1,5 @@
 /* AstroVault STAFF CONSOLE (staff.js): everything the team uses, shown by role.
-   agent: Queue | admin: + Orders, Top-ups, Products, Users | coowner: + Team (roles, audit log) | owner: + Payments.
+   Tabs are shown by PERMISSION (A.can), not by role: each role has defaults, and the owner/co-owner can grant or revoke single permissions per person (Team tab).
    The UI only HIDES tabs. Real permission checks are in the database (RLS + is_admin()/my_rank() inside each RPC),
    so a customer who edits this file in devtools still cannot do anything. Plugs in via window.AV like support.js. */
 (function(){
@@ -8,18 +8,18 @@ const A=window.AV;if(!A||!A.sb)return;
 const {S,sb,$,esc,money,when,pop,sheet,closeSheet,rpc,emsg,paint,V,act,form}=A;
 const X='<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button>';
 const RK={customer:0,agent:1,admin:2,coowner:3,owner:4};
-const TABS=[["overview","Overview",2],["queue","Queue",1],["orders","Orders",2],["topups","Top-ups",2],["products","Products",2],["users","Users",2],["team","Team",3],["pay","Payments",4]];
+const TABS=[["overview","Overview","orders"],["queue","Queue","tickets"],["orders","Orders","orders"],["topups","Top-ups","topups"],["products","Products","products"],["users","Users","users_view"],["team","Team","staff_manage"],["pay","Payments","payments"]];   // [id, label, permission needed]
 const pillT=s=>`<span class="pill ${s==="approved"?"ok":s==="pending"?"wait":"no"}">${s==="approved"?"verified":s}</span>`;
 
 // ---------- shell: tab bar with live "needs attention" counts ----------
 V.staff=async t=>{
- if(A.rank()<1)return paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Staff only.</p></div>`);
- const tabs=TABS.filter(x=>A.rank()>=x[2]);if(!tabs.find(x=>x[0]===A.staffTab))A.staffTab=A.rank()>=2?"overview":"queue";
+ if(!A.S.perms.length)return paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Staff only.</p></div>`);
+ const tabs=TABS.filter(x=>A.can(x[2]));if(!tabs.find(x=>x[0]===A.staffTab))A.staffTab=tabs[0][0];
  const head=n=>`<div class="seg">${tabs.map(x=>`<button data-a="stab" data-id="${x[0]}" class="${A.staffTab===x[0]?"on":""}">${x[1]}${n[x[0]]?` (${n[x[0]]})`:""}</button>`).join("")}</div>`;
  const cnt=q=>q.then(r=>r.count||0,()=>0);
- const n={queue:await cnt(sb.from("tickets").select("id",{count:"exact",head:true}).is("assigned_to",null).in("status",["open","pending"]))};
- if(A.rank()>=2){n.orders=await cnt(sb.from("orders").select("id",{count:"exact",head:true}).in("status",["pending","processing"]));
-  n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"))}
+ const n={queue:!A.can("tickets")?0:await cnt(sb.from("tickets").select("id",{count:"exact",head:true}).is("assigned_to",null).in("status",["open","pending"]))};
+ if(A.can("orders"))n.orders=await cnt(sb.from("orders").select("id",{count:"exact",head:true}).in("status",["pending","processing"]));
+  if(A.can("topups"))n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"));
  let body;try{body=await TAB[A.staffTab]()}catch(e){body=`<p class="neg">Error: ${esc(e.message)}</p>`}
  paint(t,head(n)+body);
 };
@@ -53,7 +53,8 @@ TAB.queue=async()=>{
  const me=S.user.id,row=k=>`<div class="item"><span><b>#${k.number} ${esc(k.subject)}</b><br><small class="lk">${esc(k.customer_name)} · ${esc(k.category)} · ${when(k.last_message_at)}${k.assigned_name?" · "+esc(k.assigned_name):""}</small></span>
   <span>${k.assigned_to?"":`<button class="btn p" data-a="qclaim" data-id="${k.id}">Claim</button> `}<button class="btn" data-a="openticket" data-id="${k.id}">Open</button></span></div>`;
  const un=data.filter(k=>!k.assigned_to),mine=data.filter(k=>k.assigned_to===me),oth=data.filter(k=>k.assigned_to&&k.assigned_to!==me);
- return `<h3>Unassigned (${un.length})</h3>${un.map(row).join("")||'<p class="en">Queue is empty. 🎉</p>'}<h3>Mine (${mine.length})</h3>${mine.map(row).join("")||'<p class="en">None.</p>'}<h3>With others (${oth.length})</h3>${oth.map(row).join("")||'<p class="en">None.</p>'}`;
+ const{data:done}=await sb.from("tickets").select("*").in("status",["resolved","closed"]).order("last_message_at",{ascending:false}).limit(30);   // oversight: read any past chat
+ return `<h3>Unassigned (${un.length})</h3>${un.map(row).join("")||'<p class="en">Queue is empty. 🎉</p>'}<h3>Mine (${mine.length})</h3>${mine.map(row).join("")||'<p class="en">None.</p>'}<h3>With others (${oth.length})</h3>${oth.map(row).join("")||'<p class="en">None.</p>'}<h3>Resolved &amp; closed (last 30)</h3>${(done||[]).map(row).join("")||'<p class="en">None.</p>'}`;
 };
 act.qclaim=async el=>{try{await rpc("claim_ticket",{p_ticket:el.dataset.id});A.openTicket(el.dataset.id)}catch(e){pop(emsg(e));A.route()}};
 
@@ -140,46 +141,84 @@ act.sdel=async el=>{const{error}=await sb.from("inventory_stock").delete().eq("i
 form.stock=async f=>{const raw=$("sk").value,items=/^---\s*$/m.test(raw)?raw.split(/^---\s*$/m):raw.split("\n");
  try{const n=await rpc("admin_add_stock",{p_product_id:f.dataset.id,p_items:items.map(s=>s.trim()).filter(Boolean)});pop("Added "+n+" item(s)");act.pstock({dataset:{id:f.dataset.id}})}catch(e){$("skm").textContent=emsg(e)}};
 
-// ---------- USERS (admin+): find, adjust wallet, place an order for them, change role (coowner+) ----------
-let UR=[];
+// ---------- USERS: find a customer, then (by permission) add money, grant coins, place an order, change role / permissions ----------
+let UR=[],TEAM=[],PMS=[];
+const PL={tickets:"Read & answer all tickets",assign_tickets:"Assign tickets to others",orders:"Process / cancel orders",place_orders:"Place orders for customers",topups:"Verify payments (top-ups)",products:"Add / edit / delete products & stock",users_view:"See customers",wallet:"Add / remove wallet money",coins:"Grant AstroCoins & set rates",payments:"Edit payment methods",staff_manage:"Manage roles & permissions",audit:"See the audit log"};
 TAB.users=async()=>`<form data-f="usearch"><label for="uq">Search username or email</label><input id="uq" required><div style="height:10px"></div><button class="btn p">Search</button></form><div id="ures"></div>`;
-const ucard=u=>`<div class="box mt"><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><div class="lk">${esc(u.email)}</div>Balance: <b>${money(u.balance)}</b>
- <div class="row mt"><button class="btn" data-a="uadj" data-id="${u.id}">Add / remove money</button><button class="btn" data-a="uorder" data-id="${u.id}">Place order</button>
- ${A.rank()>=3&&RK[u.role]<A.rank()?`<button class="btn" data-a="urole" data-id="${u.id}">Change role</button>`:""}</div></div>`;
+const ucard=u=>{const lower=RK[u.role]<A.rank(),b=[];
+ if(A.can("wallet"))b.push(`<button class="btn" data-a="uadj" data-id="${u.id}">Add / remove money</button>`);
+ if(A.can("coins"))b.push(`<button class="btn" data-a="ucoin" data-id="${u.id}">Coins</button>`);
+ if(A.can("place_orders"))b.push(`<button class="btn" data-a="uorder" data-id="${u.id}">Place order</button>`);
+ if(A.can("staff_manage")&&lower)b.push(`<button class="btn" data-a="urole" data-id="${u.id}">Role</button>`);
+ if(A.can("staff_manage")&&lower&&RK[u.role]>=1)b.push(`<button class="btn" data-a="uperms" data-id="${u.id}">Permissions</button>`);
+ return `<div class="box mt"><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><div class="lk">${esc(u.email)}</div>Balance: <b>${money(u.balance)}</b> · 🪙 ${u.coins||0}<div class="row mt">${b.join("")}</div></div>`};
 form.usearch=async()=>{const q=$("uq").value.replace(/[^\w@.+\- ]/g,"").trim();
- const{data,error}=await sb.from("profiles").select("id,username,email,balance,role").or(`username.ilike.%${q}%,email.ilike.%${q}%`).limit(10);UR=data||[];
+ const{data,error}=await sb.from("profiles").select("id,username,email,balance,role,coins,perm_grants,perm_revokes").or(`username.ilike.%${q}%,email.ilike.%${q}%`).limit(10);UR=data||[];
  $("ures").innerHTML=error?"<p class=neg>Error</p>":UR.map(ucard).join("")||"<p class=en>No match.</p>"};
-const U=id=>UR.find(u=>u.id===id)||(UR.find(u=>u.id===id));
+const U=id=>UR.find(u=>u.id===id)||TEAM.find(u=>u.id===id);
 act.uadj=el=>{const u=U(el.dataset.id);sheet(`${X}<h2>Wallet: @${esc(u.username)}</h2><p>Balance now ${money(u.balance)}. Use a minus sign to remove money.</p><form data-f="uadj" data-id="${u.id}"><label for="am">Amount (USD)</label><input id="am" type="number" step="0.01" required><label for="an">Note (shown to the customer)</label><input id="an" maxlength="200" value="Top-up"><div style="height:12px"></div><button class="btn p">Apply</button></form>`)};
 form.uadj=f=>run("admin_adjust_balance",{p_user_id:f.dataset.id,p_amount:parseFloat($("am").value),p_note:$("an").value},"Balance updated");
+act.ucoin=el=>{const u=U(el.dataset.id);sheet(`${X}<h2>AstroCoins: @${esc(u.username)}</h2><p>They have 🪙 ${u.coins||0}. Use a minus sign to remove.</p><form data-f="ucoin" data-id="${u.id}"><label for="cn">Coins</label><input id="cn" type="number" step="1" required><label for="cnn">Note</label><input id="cnn" maxlength="200" value="Bonus"><div style="height:12px"></div><button class="btn p">Apply</button></form>`)};
+form.ucoin=f=>run("admin_grant_coins",{p_user_id:f.dataset.id,p_coins:parseInt($("cn").value),p_note:$("cnn").value},"Coins updated");
 act.uorder=async el=>{const u=U(el.dataset.id),cat=await rpc("get_catalog");
  sheet(`${X}<h2>Place order for @${esc(u.username)}</h2><form data-f="uorder" data-id="${u.id}"><label for="op">Product</label><select id="op">${cat.map(p=>`<option value="${p.id}">${esc(p.name)} · ${money(p.price)}</option>`).join("")}</select>
  <label for="oi">Customer detail (email / player ID if the product asks)</label><input id="oi" maxlength="200"><label for="oc">Payment</label><select id="oc"><option value="1">Charge their wallet</option><option value="0">They paid me directly (no charge)</option></select><div style="height:12px"></div><button class="btn p">Place order</button></form>`)};
 form.uorder=f=>run("admin_place_order",{p_user_id:f.dataset.id,p_product_id:$("op").value,p_input:$("oi").value||null,p_charge:$("oc").value==="1"},"Order placed");
-act.urole=el=>{const u=U(el.dataset.id)||TEAM.find(x=>x.id===el.dataset.id);const opts=["customer","agent","admin","coowner"].filter(r=>RK[r]<A.rank());
+act.urole=el=>{const u=U(el.dataset.id);const opts=["customer","agent","admin","coowner"].filter(r=>RK[r]<A.rank());
  sheet(`${X}<h2>Role: @${esc(u.username)}</h2><form data-f="urole" data-id="${u.id}"><select id="rl">${opts.map(r=>`<option ${r===u.role?"selected":""}>${r}</option>`).join("")}</select>
- <p class="en" style="font-size:13px">agent = support only · admin = orders, top-ups, products, users · coowner = admin + manage staff</p><div style="height:12px"></div><button class="btn p">Save</button></form>`)};
+ <p class="en" style="font-size:13px">agent = support only · admin = orders, top-ups, products, users · coowner = admin + manage staff. Fine-tune with Permissions.</p><div style="height:12px"></div><button class="btn p">Save</button></form>`)};
 form.urole=f=>run("set_user_role",{p_user_id:f.dataset.id,p_role:$("rl").value},"Role updated");
+// Permission editor: tick = allowed. Saved as grants (ticked but not a role default) and revokes (unticked but a role default).
+act.uperms=el=>{const u=U(el.dataset.id),def=A.ROLEP[u.role]||[],g=u.perm_grants||[],r=u.perm_revokes||[];
+ sheet(`${X}<h2>Permissions: @${esc(u.username)}</h2><p class="en" style="font-size:13px">Role: ${esc(u.role)}. Tick what this person may do. You can only hand out permissions you have yourself (greyed = you don’t have it).</p><form data-f="uperms" data-id="${u.id}">${Object.keys(PL).map(p=>`<label class="chk"><input type="checkbox" data-p="${p}" ${((def.includes(p)||g.includes(p))&&!r.includes(p))?"checked":""} ${A.can(p)?"":"disabled"}> <span>${PL[p]}</span></label>`).join("")}<div style="height:12px"></div><button class="btn p">Save permissions</button></form>`)};
+form.uperms=f=>{const u=U(f.dataset.id),def=A.ROLEP[u.role]||[],grants=[],revokes=[];
+ f.querySelectorAll("input[data-p]").forEach(c=>{const p=c.dataset.p,d=def.includes(p);
+  if(c.disabled){if((u.perm_grants||[]).includes(p))grants.push(p);if((u.perm_revokes||[]).includes(p))revokes.push(p);return}   // not editable by me: keep as is
+  if(c.checked&&!d)grants.push(p);if(!c.checked&&d)revokes.push(p)});
+ return run("set_user_perms",{p_user_id:u.id,p_grants:grants,p_revokes:revokes},"Permissions saved")};
 
-// ---------- TEAM (coowner+): staff list + audit log ----------
-let TEAM=[];
+// ---------- TEAM: staff list, coin rates, audit log ----------
 TAB.team=async()=>{
- const[st,au]=await Promise.all([sb.from("profiles").select("id,username,email,role,notify_email").neq("role","customer").order("role"),sb.from("audit_log").select("*").order("created_at",{ascending:false}).limit(40)]);
- TEAM=st.data||[];
- return `<p class="en" style="font-size:14px">To add someone: Users tab → search their email (they must sign up first) → Change role.</p><h3>Team</h3>${TEAM.map(u=>`<div class="item"><span><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><br><small class="lk">${esc(u.email)}</small></span>${RK[u.role]<A.rank()?`<button class="btn" data-a="urole" data-id="${u.id}">Change</button>`:""}</div>`).join("")}
- <h3>Audit log</h3>${(au.data||[]).map(a=>`<div class="tx"><span>${esc(a.actor_name||"?")}: ${esc(a.action)}<small>${esc(a.target||"")} ${esc(JSON.stringify(a.details||{}))}</small></span><small>${when(a.created_at)}</small></div>`).join("")||'<p class="en">Empty.</p>'}`;
+ const none=Promise.resolve({data:[]});
+ const[st,au,se]=await Promise.all([sb.from("profiles").select("id,username,email,role,coins,balance,perm_grants,perm_revokes").neq("role","customer").order("role"),A.can("audit")?sb.from("audit_log").select("*").order("created_at",{ascending:false}).limit(40):none,A.can("coins")?sb.from("settings").select("key,value"):none]);
+ TEAM=st.data||[];const SE={};(se.data||[]).forEach(r=>SE[r.key]=r.value);
+ return `<p class="en" style="font-size:14px">To add someone: Users tab → search their email (they must sign up first) → Role. Then fine-tune with Permissions.</p>
+ ${A.can("coins")?`<div class="box mt"><b>🪙 AstroCoins rates</b><form data-f="coinrates"><label for="ce">Coins earned per $1 spent</label><input id="ce" type="number" min="1" value="${esc(SE.coin_earn||"2")}"><label for="cr">Coins needed for $1 of wallet credit</label><input id="cr" type="number" min="1" value="${esc(SE.coin_redeem||"100")}"><div style="height:10px"></div><button class="btn p">Save rates</button></form></div>`:""}
+ <h3>Team</h3>${TEAM.map(u=>`<div class="item"><span><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><br><small class="lk">${esc(u.email)}${(u.perm_grants||[]).length||(u.perm_revokes||[]).length?" · custom permissions":""}</small></span>${RK[u.role]<A.rank()&&RK[u.role]>=1?`<button class="btn" data-a="uperms" data-id="${u.id}">Permissions</button>`:""}</div>`).join("")}
+ ${A.can("audit")?`<h3>Audit log</h3>${(au.data||[]).map(a=>`<div class="tx"><span>${esc(a.actor_name||"?")}: ${esc(a.action)}<small>${esc(a.target||"")} ${esc(JSON.stringify(a.details||{}))}</small></span><small>${when(a.created_at)}</small></div>`).join("")||'<p class="en">Empty.</p>'}`:""}`;
 };
+form.coinrates=async()=>{try{await rpc("admin_set_setting",{p_key:"coin_earn",p_value:$("ce").value});await rpc("admin_set_setting",{p_key:"coin_redeem",p_value:$("cr").value});pop("Rates saved");A.route()}catch(e){pop(emsg(e))}};
 
-// ---------- PAYMENTS (owner only): where customers send money ----------
-let PMS=[];
+// ---------- PAYMENTS (permission "payments", owner by default): simple typed forms, only the fields each type needs ----------
+//  binance_pay: Pay ID (+name) | crypto: network + address | bank: bank, holder, IBAN | link: url | manual: text only
+const PT={
+ binance_pay:{label:"Binance Pay",fields:[["details","Binance Pay ID","e.g. 216818778"],["name","Account name (optional)","e.g. ItsAstro"]],qr:true,auto:true},
+ crypto:{label:"Crypto wallet (USDT)",fields:[["network","Network","TRC20 or BEP20"],["details","Wallet address",""]],qr:true,auto:true},
+ bank:{label:"Bank / mobile transfer",fields:[["bank","Bank or service name",""],["holder","Account holder",""],["details","IBAN / RIB / account number",""]]},
+ link:{label:"Payment link",fields:[["details","Link (https://…)",""]]},
+ manual:{label:"Other (text instructions only)",fields:[]}};
+const pkind=m=>m.kind==="address"?"crypto":m.kind;
 TAB.pay=async()=>{const{data,error}=await sb.from("payment_methods").select("*").order("sort_order");if(error)throw error;PMS=data;
- return `<p class="en" style="font-size:14px">Only the owner can change these. Customers see them on the Wallet page.</p><button class="btn p" data-a="pmedit">+ New method</button>`+PMS.map(m=>`<div class="item"><span><b>${esc(m.label)}</b> ${m.coming_soon?'<span class="pill wait">soon</span>':""}${m.is_active?"":'<span class="pill no">hidden</span>'}<br><small class="lk">${esc(m.kind)} · ${esc(m.details||"(empty)")}</small></span><button class="btn" data-a="pmedit" data-id="${esc(m.id)}">Edit</button></div>`).join("")};
-act.pmedit=el=>{const m=PMS.find(x=>x.id===el.dataset.id)||{id:"",label:"",kind:"manual",details:"",instructions:"",coming_soon:false,is_active:true,sort_order:100};
- sheet(`${X}<h2>${m.id?"Edit":"New"} payment method</h2><form data-f="pmedit"><label>ID (letters, numbers, - _)</label><input id="mi" value="${esc(m.id)}" ${m.id?"readonly":""} required pattern="[a-z0-9_-]{2,30}">
- <label>Name shown</label><input id="ml" value="${esc(m.label)}" required><label>Type</label><select id="mk">${["address","link","manual"].map(k=>`<option ${k===m.kind?"selected":""}>${k}</option>`).join("")}</select>
- <label>Wallet address or https link</label><input id="md" value="${esc(m.details)}"><label>Instructions for the customer</label><textarea id="mn" rows="3">${esc(m.instructions)}</textarea>
- <label>Sort</label><input id="ms" type="number" value="${m.sort_order}"><label><input type="checkbox" id="mc" ${m.coming_soon?"checked":""}> Coming soon</label><label><input type="checkbox" id="ma" ${m.is_active?"checked":""}> Visible</label>
- <div style="height:12px"></div><button class="btn p">Save</button></form><p id="pmm" class="au-m"></p>`)};
-form.pmedit=async()=>{const row={id:$("mi").value.trim(),label:$("ml").value.trim(),kind:$("mk").value,details:$("md").value.trim(),instructions:$("mn").value.trim(),sort_order:parseInt($("ms").value)||100,coming_soon:$("mc").checked,is_active:$("ma").checked};
+ return `<p class="en" style="font-size:14px">Customers see these on the Wallet page. Only people with the “payments” permission can change them.</p><button class="btn p" data-a="pmnew">+ Add payment method</button>`+PMS.map(m=>`<div class="item"><span><b>${esc(m.label)}</b> ${m.auto_verify?'<span class="pill ok">auto</span>':""}${m.coming_soon?'<span class="pill wait">soon</span>':""}${m.is_active?"":'<span class="pill no">hidden</span>'}<br><small class="lk">${esc((PT[pkind(m)]||{}).label||m.kind)} · ${esc((m.details||"(empty)").slice(0,28))}</small></span><button class="btn" data-a="pmedit" data-id="${esc(m.id)}">Edit</button></div>`).join("")};
+act.pmnew=()=>sheet(`${X}<h2>Add payment method</h2><p class="en">What kind of payment is it?</p>${Object.keys(PT).map(k=>`<button class="btn" style="margin-bottom:8px;width:100%" data-a="pmtype" data-t="${k}">${PT[k].label}</button>`).join("")}`);
+act.pmtype=el=>pmForm(null,el.dataset.t);
+act.pmedit=el=>{const m=PMS.find(x=>x.id===el.dataset.id);pmForm(m,pkind(m))};
+function pmForm(m,t){const T=PT[t],meta=(m&&m.meta)||{};m=m||{label:"",details:"",instructions:"",coming_soon:false,is_active:true,sort_order:100,auto_verify:false,image_url:""};
+ const val=k=>k==="details"?m.details:(meta[k]||"");
+ sheet(`${X}<h2>${m.id?"Edit":"New"}: ${T.label}</h2><form data-f="pmedit" data-id="${esc(m.id||"")}" data-t="${t}">
+ <label>Name shown to customers</label><input id="ml" value="${esc(m.label)}" required placeholder="e.g. ${esc(T.label)}">
+ ${T.fields.map(f=>`<label>${f[1]}</label><input data-k="${f[0]}" value="${esc(val(f[0]))}" placeholder="${esc(f[2]||"")}" ${f[0]==="details"?"required":""}>`).join("")}
+ ${T.qr?`<label>QR image (optional, e.g. assets/my-qr.png)</label><input id="mq" value="${esc(m.image_url||"")}">`:""}
+ ${T.auto?`<label class="chk"><input type="checkbox" id="mauto" ${m.auto_verify?"checked":""}> <span>Credit paid invoices automatically (turn on only after the watch-deposits function is deployed)</span></label>`:""}
+ <label class="chk"><input type="checkbox" id="mc" ${m.coming_soon?"checked":""}> <span>Coming soon (shown, not usable)</span></label><label class="chk"><input type="checkbox" id="ma" ${m.is_active!==false?"checked":""}> <span>Visible to customers</span></label>
+ <details class="mt"><summary>More options</summary><label>Extra instructions for customers (optional)</label><textarea id="mn" rows="3">${esc(m.instructions||"")}</textarea><label>Sort (small = first)</label><input id="ms" type="number" value="${m.sort_order||100}"></details>
+ <div style="height:12px"></div><button class="btn p">Save</button></form><p id="pmm" class="au-m" style="color:#dc2626"></p>`)}
+form.pmedit=async f=>{const t=f.dataset.t,T=PT[t],meta={};let details="";
+ f.querySelectorAll("[data-k]").forEach(i=>{const v=i.value.trim();if(i.dataset.k==="details")details=v;else if(v)meta[i.dataset.k]=v});
+ if(t==="crypto"){meta.network=(meta.network||"").toUpperCase();if(!meta.coin)meta.coin="USDT"}
+ const label=$("ml").value.trim(),auto=!!($("mauto")&&$("mauto").checked);
+ if(auto&&t==="crypto"&&!["TRC20","BEP20"].includes(meta.network))return $("pmm").textContent="Auto-verify needs the network to be TRC20 or BEP20.";
+ const id=f.dataset.id||((label.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,24)||"method")+"-"+Math.random().toString(36).slice(2,5));
+ const row={id,label,kind:t,details,meta,image_url:T.qr&&$("mq")?($("mq").value.trim()||null):null,auto_verify:auto,instructions:$("mn").value.trim(),sort_order:parseInt($("ms").value)||100,coming_soon:$("mc").checked,is_active:$("ma").checked};
  const{error}=await sb.from("payment_methods").upsert(row);if(error)$("pmm").textContent=error.message;else{closeSheet();pop("Saved");A.route()}};
 })();

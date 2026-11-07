@@ -12,6 +12,7 @@ const P={
  terms:["Terms of use",`<ul class="info-l">
   <li><b>Wallet.</b> Your wallet is a prepaid balance for buying in this store ($1 = 1.00). It is not a bank account and earns no interest.</li>
   <li><b>Top-ups.</b> We credit your wallet only after we verify your payment by hand. You must give the true sender name, the transaction ID and a screenshot. Fake, edited or reused proofs are rejected and may lead to account suspension.</li>
+  <li><b>AstroCoins.</b> Loyalty rewards earned on completed orders. They have no cash value, can only be redeemed into wallet credit at the posted rate, and the rates may change.</li>
   <li><b>Orders.</b> Instant items are delivered as soon as you pay. Other items are processed by hand: Pending, then Processing, then Completed. If we cannot complete an order it is cancelled and refunded to your wallet.</li>
   <li><b>Third-party services.</b> Subscriptions and accounts come from other companies, who may change or end them. Follow each product's instructions and warranty. Do not change shared credentials or share them further.</li>
   <li><b>Prices.</b> The price you see at checkout is the price you pay. Prices can change for future orders.</li>
@@ -31,6 +32,7 @@ const P={
   <li><b>What we don't do:</b> no ads, no selling your data, no tracking cookies.</li>
   <li><b>Your rights:</b> ask us in a ticket to export or delete your account and we will do it.</li></ul><p class="lk">Last updated ${UPDATED}.</p>`],
  faq:["FAQ",`<details><summary>How do I add money?</summary><p class="en">Wallet tab: choose a method, send the payment, then upload the screenshot with the transaction ID and your name. We verify and credit it.</p></details>
+  <details><summary>What are AstroCoins?</summary><p class="en">Cashback points you earn on completed orders. Redeem them from the Wallet tab as wallet credit.</p></details>
   <details><summary>How long does verification take?</summary><p class="en">Usually within a few hours. You get a notification and an email as soon as it is done.</p></details>
   <details><summary>Instant vs "On request"?</summary><p class="en">Instant items appear in Orders the moment you pay. "On request" items are handled by our team and show their status in Orders.</p></details>
   <details><summary>My item stopped working.</summary><p class="en">Open the order and press "Need help with this order". We will replace or refund it within the warranty.</p></details>

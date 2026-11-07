@@ -10,6 +10,8 @@ Local test: `python3 -m http.server` then open http://localhost:8000. Setup + op
 | support.js | customer tickets, chat window, notification bell |
 | legal.js | About / Terms / Refunds / Privacy / FAQ text (edit before launch) |
 | staff.js | staff console (queue, orders, top-ups, products, users, team, payments) |
-| supabase/schema.sql -> schema_v2.sql -> schema_v3.sql -> seed.sql | run in this order |
+| supabase/schema.sql, v2, v3, v5, then seed.sql, seed_payments.sql | run in this order |
+| supabase/functions/watch-deposits | auto-credits on-chain USDT deposits (cron every minute) |
+| assets/ | QR code images for payment methods |
 | supabase/functions/send-emails | Edge Function that sends emails (Resend) |
 | supabase/admin-helpers.sql | setup/reporting SQL |

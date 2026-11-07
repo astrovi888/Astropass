@@ -19,8 +19,21 @@ Static site, no build step, vanilla JS. All money + permission logic is in Postg
 - Shop: live search, trust strip, manual-order ETA (config ETA_MANUAL). Balance chip refreshes when a notification arrives (support.js).
 - Password-reset email keeps the default link template ({{ .ConfirmationURL }}); only Confirm signup + Magic Link use {{ .Token }}.
 
+## v5 additions (permissions, payments, coins, auto-deposits)
+- SQL: supabase/schema_v5.sql (run after v2, v3). Granular permissions (has_perm/my_perms/set_user_perms; role defaults + per-person grants/revokes),
+  typed payment methods (binance_pay|crypto|bank|link|manual + QR + auto_verify), AstroCoins (earn via trigger on completed orders, redeem_coins,
+  admin_grant_coins, settings table), deposit_invoices + create_deposit_invoice + credit_deposit (service role only), ticket oversight via 'tickets' perm.
+  The 13 permission-checked functions were REGENERATED from earlier files by script (is_admin() -> _need('perm')).
+- Edge Function supabase/functions/watch-deposits: TRON via TronGrid, BSC via JSON-RPC getLogs (cursor in chain_cursors), Binance Pay via read-only
+  Pay-history API (EXPERIMENTAL, untested; Binance may geo-block servers). Cron every minute + WEBHOOK_SECRET. Auto-verify is OFF by default per method.
+- seed_payments.sql: owner's Binance Pay ID, TRC20 + BEP20 addresses (verified: TRON checksum ok, QR images decode to the same addresses). assets/*.png = QR codes.
+- UI: wallet shows typed method details + QR + network warning, "Pay automatically" invoice flow, proof form as fallback, coins card; staff tabs by permission,
+  permission editor (Users/Team > Permissions), coin tools, payment form with only the needed fields, resolved/closed tickets visible for oversight.
+- Known limits: staff notifications still go by rank, not permission; no internal staff-only chat/notes yet; per-user HD wallets deliberately NOT built (custody risk).
+- UNTESTED: schema_v5.sql, watch-deposits, Binance polling. UI tested with mocked Supabase only.
+
 ## Run order (owner)  (then schema_v3.sql: product delete)
-1. NEW Supabase project -> SQL Editor: schema.sql, then schema_v2.sql, then seed.sql (seed = all "coming soon" templates).
+1. NEW Supabase project -> SQL Editor, in this order: schema.sql, schema_v2.sql, schema_v3.sql, schema_v5.sql, seed.sql, seed_payments.sql.
 2. config.js: Project URL + publishable key (never service_role).
 3. Auth email template "Confirm signup" must contain {{ .Token }}. Add site URL in Auth > URL config.
 4. Sign up on the site; SQL: `update public.profiles set role='owner' where email='you@example.com';`

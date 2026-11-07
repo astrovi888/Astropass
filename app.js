@@ -11,7 +11,7 @@ const when=d=>{try{return new Date(d).toLocaleString([],{dateStyle:"medium",time
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 function pop(t){const p=$("pop");p.textContent=t;p.className="";void p.offsetWidth;p.className="go"}
 async function copy(t){try{await navigator.clipboard.writeText(t);pop("Copied")}catch(e){pop("Copy failed")}}
-const ERR={has_history:"This product has orders, so it can’t be deleted. Use Hide instead.",coming_soon:"This product is not live yet.",duplicate_reference:"That transaction ID was already used.",proof_required:"Please attach a screenshot of your payment.",ticket_closed:"This ticket is closed.",already_assigned:"Someone else already picked this up.",too_many_tickets:"You have 5 open tickets. Please wait for replies.",invalid_message:"Please write a subject and a message.",not_assigned:"This ticket belongs to another agent.",invalid_status:"Invalid status.",invalid_role:"Invalid role.",not_found:"Not found.",not_authenticated:"Please log in first.",insufficient_funds:"Your balance is too low. Top up first.",out_of_stock:"Sorry, this just sold out.",product_unavailable:"This product is no longer available.",input_required:"Please fill in the required detail.",price_changed:"The price just changed. Please review it.",too_many_pending:"You already have 3 pending top-ups. Wait for approval.",invalid_amount:"Invalid amount.",invalid_reference:"Please enter the payment reference.",forbidden:"Not allowed.",already_decided:"Already handled.",not_pending:"Order is not pending.",order_cancelled:"Order was cancelled."};
+const ERR={insufficient_coins:"Not enough AstroCoins.",method_unavailable:"That payment method isn’t available.",invalid_permission:"Unknown permission.",busy_try_again:"Busy, please try again.",invalid_setting:"Invalid setting.",has_history:"This product has orders, so it can’t be deleted. Use Hide instead.",coming_soon:"This product is not live yet.",duplicate_reference:"That transaction ID was already used.",proof_required:"Please attach a screenshot of your payment.",ticket_closed:"This ticket is closed.",already_assigned:"Someone else already picked this up.",too_many_tickets:"You have 5 open tickets. Please wait for replies.",invalid_message:"Please write a subject and a message.",not_assigned:"This ticket belongs to another agent.",invalid_status:"Invalid status.",invalid_role:"Invalid role.",not_found:"Not found.",not_authenticated:"Please log in first.",insufficient_funds:"Your balance is too low. Top up first.",out_of_stock:"Sorry, this just sold out.",product_unavailable:"This product is no longer available.",input_required:"Please fill in the required detail.",price_changed:"The price just changed. Please review it.",too_many_pending:"You already have 3 pending top-ups. Wait for approval.",invalid_amount:"Invalid amount.",invalid_reference:"Please enter the payment reference.",forbidden:"Not allowed.",already_decided:"Already handled.",not_pending:"Order is not pending.",order_cancelled:"Order was cancelled."};
 const emsg=e=>ERR[e&&e.message]||(/fetch|network/i.test(e&&e.message||"")?"Network problem. Try again.":"Something went wrong. Please try again.");
 
 // theme
@@ -20,9 +20,13 @@ $("brand").textContent=C.BRAND;document.title=C.BRAND;$("contact").textContent=C
 
 const ready=window.supabase&&/^https:\/\//.test(C.SUPABASE_URL)&&!/YOUR-/.test(C.SUPABASE_URL+C.SUPABASE_KEY);
 const sb=ready?window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_KEY):null;
-const S={user:null,profile:null,catalog:[],cat:"all",q:"",pend:null,buy:null};
+const S={user:null,profile:null,perms:[],catalog:[],cat:"all",q:"",pend:null,buy:null};
 const RANK={customer:0,agent:1,admin:2,coowner:3,owner:4};   // mirrors _rank() in SQL; UI only, the database enforces it
 const rank=()=>RANK[(S.profile&&S.profile.role)||"customer"]||0;
+// Role default permissions (mirror of _role_perms() in SQL). Real permissions come from my_perms(); this is only a fallback + used by the permission editor.
+const ROLEP={agent:["tickets"],admin:["tickets","assign_tickets","orders","place_orders","topups","products","users_view","wallet","coins"]};
+ROLEP.coowner=ROLEP.admin.concat(["staff_manage","audit"]);ROLEP.owner=ROLEP.coowner.concat(["payments"]);
+const can=p=>(S.perms||[]).includes(p);
 let tok=0;
 const app=$("app");
 const paint=(t,h)=>{if(t===tok)app.innerHTML=h};
@@ -68,14 +72,19 @@ async function authSubmit(mode){
   if(r.error)return msg(r.error.message,true);closeModal();
  }catch(e){msg("Network problem. Please try again.",true)}
 }
-async function loadProfile(){const{data}=await sb.from("profiles").select("id,username,email,balance,role,notify_email").eq("id",S.user.id).maybeSingle();S.profile=data}
+async function loadProfile(){
+ let r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins").eq("id",S.user.id).maybeSingle();
+ if(r.error)r=await sb.from("profiles").select("id,username,email,balance,role,notify_email").eq("id",S.user.id).maybeSingle();   // older database without coins
+ S.profile=r.data;
+ try{S.perms=(await rpc("my_perms"))||[]}catch(e){S.perms=(S.profile&&ROLEP[S.profile.role])||[]}
+}
 async function setUser(u){if(u&&S.user&&S.user.id===u.id)return;S.user=u;S.profile=null;if(u)await loadProfile();if(window.AV&&AV.onAuth)AV.onAuth(u);chrome();route()}
 // Header chips + bottom bar. Staff tab appears for agent and above (rank>=1).
 function chrome(){
  const p=S.profile,bc=$("balchip"),ac=$("acct");bc.classList.toggle("hide",!S.user);bc.textContent="💳 "+money(p&&p.balance);
  $("bell").classList.toggle("hide",!S.user);ac.classList.toggle("hide",!!S.user);
  const tabs=[["shop","🛍️","Shop"],["wallet","👛","Wallet"],["orders","📦","Orders"],["support","💬","Help"],["account","👤","Account"]];
- if(rank()>=1)tabs.push(["staff","🛠️","Staff"]);
+ if(S.perms.length)tabs.push(["staff","🛠️","Staff"]);
  $("bbar").innerHTML=tabs.map(t=>`<button data-go="${t[0]}"><i>${t[1]}</i>${t[2]}</button>`).join("");mark();
 }
 const cur=()=>{const m=/^#\/([a-z]+)/.exec(location.hash);return m&&V[m[1]]?m[1]:"shop"};
@@ -122,32 +131,67 @@ async function doBuy(){
 }
 
 // ---------- wallet ----------
-// Top-up = pay outside the site, then submit PROOF (amount, sender name, transaction ID, screenshot). Staff verify -> wallet credited.
-// Payment methods come from the database (owner edits them in Staff > Payments), not from config.js.
-let PM=[];
+// Two ways to add money, chosen per payment method (owner sets this in Staff > Payments):
+//  AUTO  : "Pay automatically" -> exact-amount invoice (create_deposit_invoice) -> watch-deposits credits it on-chain, no screenshot.
+//  PROOF : pay, then submit amount + sender name + transaction ID + screenshot; staff verify (submit_topup). Always available as fallback.
+// Methods are typed (binance_pay | crypto | bank | link | manual); each type shows only the fields it needs.
+let PM=[],INV=null,INVT=null,SET={};
 const usable=m=>m.coming_soon||m.kind==="manual"||!!m.details;
+const REFLAB={binance_pay:"Binance Pay order ID (from your receipt)",crypto:"Transaction hash (TXID)",address:"Transaction hash (TXID)",bank:"Transfer reference number"};
 async function wallet(t){
  if(!S.user)return paint(t,login());
- await loadProfile();chrome();
- const[tx,tp,pm]=await Promise.all([sb.from("wallet_transactions").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(30),sb.from("topup_requests").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(10),rpc("get_payment_methods").catch(()=>[])]);
+ await loadProfile();chrome();clearInterval(INVT);INV=null;
+ const[tx,tp,pm,st]=await Promise.all([sb.from("wallet_transactions").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(30),sb.from("topup_requests").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(10),rpc("get_payment_methods").catch(()=>[]),sb.from("settings").select("key,value")]);
+ SET={};(st.data||[]).forEach(r=>SET[r.key]=r.value);
  PM=(pm||[]).filter(usable);const T=C.TOPUP,pre=S.pend||T.presets[1]||10;S.pend=null;
  if(!PM.find(m=>m.id===S.meth&&!m.coming_soon))S.meth=(PM.find(m=>!m.coming_soon)||{}).id;
+ const rate=parseInt(SET.coin_redeem||"100"),coins=(S.profile&&S.profile.coins)||0,redeemable=Math.floor(coins/rate)*rate;
  paint(t,`<div class="box wal"><span class="en">Wallet balance</span><b>${money(S.profile&&S.profile.balance)}</b><span class="en" style="font-size:13px">$1 = 1.00 site balance</span></div>
- <div class="box mt"><h2>Add funds</h2><div>${T.presets.map(a=>`<button type="button" class="chip" data-a="amt" data-v="${a}">${money(a)}</button>`).join("")}</div>
- <form data-f="topup"><label for="tamt">Amount you paid (${money(T.min)}–${money(T.max)})</label><input id="tamt" type="number" min="${T.min}" max="${T.max}" step="0.01" value="${pre}" required>
- <label>1. Choose a payment method</label><div id="tmeths">${PM.map(m=>`<button type="button" class="chip${S.meth===m.id?" on":""}" data-a="meth" data-id="${esc(m.id)}" ${m.coming_soon?"disabled":""}>${esc(m.label)}${m.coming_soon?" · soon":""}</button>`).join("")||'<span class="en">No payment method is set up yet.</span>'}</div><div id="tinfo" class="note"></div>
- <label>2. Send the payment, then give us proof</label>
- <label for="tname">Name on the payment (sender name)</label><input id="tname" maxlength="100" required autocomplete="off">
- <label for="tref">Transaction ID / reference number</label><input id="tref" maxlength="200" required autocomplete="off">
+ <div class="box mt coinbox"><div><b>🪙 ${coins} AstroCoins</b><div class="lk">Earn ${esc(SET.coin_earn||"2")} per $1 you spend · ${rate} coins = $1</div></div>${redeemable?`<button class="btn" data-a="redeem">Redeem ${redeemable} → ${money(redeemable/rate)}</button>`:""}</div>
+ <div class="box mt"><h2>Add funds</h2><label for="tamt">Amount (USD, ${money(T.min)}–${money(T.max)})</label><div>${T.presets.map(a=>`<button type="button" class="chip" data-a="amt" data-v="${a}">${money(a)}</button>`).join("")}</div>
+ <input id="tamt" type="number" min="${T.min}" max="${T.max}" step="0.01" value="${pre}">
+ <label>Payment method</label><div id="tmeths">${PM.map(m=>`<button type="button" class="chip${S.meth===m.id?" on":""}" data-a="meth" data-id="${esc(m.id)}" ${m.coming_soon?"disabled":""}>${esc(m.label)}${m.coming_soon?" · soon":""}</button>`).join("")||'<span class="en">No payment method is set up yet.</span>'}</div>
+ <div id="tinfo" class="note"></div><div id="tauto"></div>
+ <details id="tdet" class="mt"><summary id="tsum">Already paid but not credited? Send proof</summary>
+ <form data-f="topup"><label for="tname">Name on the payment (sender name)</label><input id="tname" maxlength="100" required autocomplete="off">
+ <label for="tref" id="trlab">Reference</label><input id="tref" maxlength="200" required autocomplete="off">
  <label for="tfile">Screenshot of the payment (PNG/JPG, max 5 MB)</label><input id="tfile" type="file" accept="image/png,image/jpeg,image/webp" required>
- <div style="height:12px"></div><button class="btn p">Submit for verification</button></form>
- <p id="tmsg" class="au-m" role="status"></p><p class="lk">We verify every payment by hand and credit your wallet, ${esc(T.eta)}. Fake or reused proofs are rejected.</p></div>
+ <div style="height:12px"></div><button class="btn p">Submit for verification</button></form></details>
+ <p id="tmsg" class="au-m" role="status"></p><p class="lk">Manual proofs are verified by hand, ${esc(T.eta)}. Fake or reused proofs are rejected.</p></div>
  <h3>Top-up requests</h3>${tp.data&&tp.data.length?tp.data.map(r=>`<div class="tx"><span>${money(r.amount)} · ${esc(r.method)}<small>${when(r.created_at)}${r.admin_note?" · "+esc(r.admin_note):""}</small></span><span class="pill ${r.status==="approved"?"ok":r.status==="pending"?"wait":"no"}">${r.status==="approved"?"verified":r.status}</span></div>`).join(""):'<p class="en">None yet.</p>'}
  <h3>Activity</h3>${tx.data&&tx.data.length?tx.data.map(r=>`<div class="tx"><span>${esc(r.note||r.kind)}<small>${when(r.created_at)}</small></span><span class="${r.amount>0?"pos":"neg"}">${r.amount>0?"+":""}${money(r.amount)}</span></div>`).join(""):'<p class="en">No activity yet.</p>'}`);
  methInfo();
 }
-function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;if(!m){i.textContent="";return}
- i.innerHTML=(m.instructions?`<p>${esc(m.instructions)}</p>`:"")+(m.kind==="address"?`<div class="cred" id="addr">${esc(m.details)}</div><button type="button" class="btn" data-a="copyel" data-id="addr">Copy address</button>`:m.kind==="link"&&/^https:\/\//.test(m.details)?`<a class="btn p" style="display:block;text-decoration:none" href="${esc(m.details)}" target="_blank" rel="noopener">Open payment page</a>`:m.details?`<div class="cred">${esc(m.details)}</div>`:"")}
+// Show the selected method: only the details its type needs (Pay ID / address+network / bank fields / link) + QR + warnings.
+function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;if(!m){i.textContent="";$("tauto").innerHTML="";return}
+ const meta=m.meta||{},cp=(id,txt)=>`<div class="cred" id="${id}">${esc(txt)}</div><button type="button" class="btn" data-a="copyel" data-id="${id}">Copy</button>`;let h="";
+ if(m.kind==="binance_pay")h=`<p>Open Binance → <b>Pay</b> → <b>Send</b>, scan the QR or enter this Pay ID, and send in <b>USDT</b>.</p><p class="meta"><span>Binance Pay ID</span></p>${cp("c1",m.details)}${meta.name?`<p class="lk">Account name: ${esc(meta.name)}</p>`:""}`;
+ else if(m.kind==="crypto"||m.kind==="address")h=`<p class="warn">⚠️ Send only <b>${esc(meta.coin||"USDT")}</b> on the <b>${esc(meta.network||"correct")}</b> network. Anything sent on another network is lost.</p>${cp("c1",m.details)}`;
+ else if(m.kind==="bank")h=`${meta.bank?`<p class="meta"><span>Bank</span><b>${esc(meta.bank)}</b></p>`:""}${meta.holder?`<p class="meta"><span>Account holder</span><b>${esc(meta.holder)}</b></p>`:""}${cp("c1",m.details)}`;
+ else if(m.kind==="link"&&/^https:\/\//.test(m.details))h=`<a class="btn p" style="display:block;text-decoration:none" href="${esc(m.details)}" target="_blank" rel="noopener">Open payment page</a>`;
+ if(m.image_url&&/^(assets\/|https:\/\/)/.test(m.image_url))h+=`<img class="qr" src="${esc(m.image_url)}" alt="QR code" width="190" height="190">`;
+ if(m.instructions)h+=`<p class="lk">${esc(m.instructions)}</p>`;
+ i.innerHTML=h;$("trlab").textContent=REFLAB[m.kind]||"Reference";
+ $("tauto").innerHTML=m.auto_verify?`<button type="button" class="btn p" data-a="mkinv">Pay automatically</button><p class="lk">We give you an exact amount to send. Your wallet is credited automatically, usually within minutes. No screenshot needed.</p>`:"";
+ $("tdet").open=!m.auto_verify;
+}
+// Auto flow: reserve exact amount -> poll until credited / expired.
+async function mkInvoice(){
+ const amt=parseFloat($("tamt").value),T=C.TOPUP,el=$("tmsg");el.style.color="#dc2626";
+ if(!(amt>=T.min&&amt<=T.max))return el.textContent="Amount must be between "+money(T.min)+" and "+money(T.max)+".";
+ el.textContent="";clearInterval(INVT);
+ try{INV=await rpc("create_deposit_invoice",{p_method:S.meth,p_amount:amt})}catch(e){return el.textContent=emsg(e)}
+ $("tauto").innerHTML=`<div class="box" id="invbox" style="background:var(--soft2)"><p class="en">Send <b>exactly</b> this amount. The extra cents identify your payment:</p><div class="cred" id="invamt">${Number(INV.amount).toFixed(3)}</div><button type="button" class="btn" data-a="copyel" data-id="invamt">Copy amount</button><p id="invst" class="lk">⏳ Waiting for your payment… <span id="invt"></span></p></div>`;
+ let tick=0;INVT=setInterval(async()=>{if(!INV||!$("invst"))return clearInterval(INVT);
+  const left=Math.floor((new Date(INV.expires_at)-Date.now())/1000);$("invt").textContent=Math.max(0,Math.floor(left/60))+":"+String(Math.max(0,left%60)).padStart(2,"0");
+  if(++tick%5&&left>0)return;
+  const{data}=await sb.from("deposit_invoices").select("status").eq("id",INV.id).maybeSingle();
+  if(data&&data.status==="paid"){clearInterval(INVT);INV=null;await loadProfile();chrome();pop("Deposit received! 🎉");route()}
+  else if(left<=0||(data&&data.status==="expired")){clearInterval(INVT);$("invst").textContent="This invoice expired. If you already paid, send proof below."}},1000);
+}
+async function redeem(){const rate=parseInt(SET.coin_redeem||"100"),n=Math.floor(((S.profile&&S.profile.coins)||0)/rate)*rate;
+ if(!n||!confirm("Redeem "+n+" AstroCoins for "+money(n/rate)+" wallet credit?"))return;
+ try{await rpc("redeem_coins",{p_coins:n});pop("Redeemed!");await loadProfile();chrome();route()}catch(e){pop(emsg(e))}}
 // Upload screenshot to the private "proofs" bucket (folder = user id), then call submit_topup which re-checks everything server-side.
 async function topupSubmit(){
  const m=PM.find(x=>x.id===S.meth),el=$("tmsg"),file=$("tfile").files[0],btn=document.querySelector('[data-f="topup"] .btn.p');
@@ -213,7 +257,8 @@ document.addEventListener("click",async e=>{
  else if(k==="buyno")openProduct(S.buy.id);else if(k==="buy2")doBuy();
  else if(k==="copyel"){const el=$(id);if(el)copy(el.textContent)}
  else if(k==="amt")$("tamt").value=a.dataset.v;
- else if(k==="meth"){S.meth=id;document.querySelectorAll("#tmeths .chip").forEach(c=>c.classList.toggle("on",c.dataset.id===id));methInfo()}
+ else if(k==="mkinv")mkInvoice();else if(k==="redeem")redeem();
+ else if(k==="meth"){clearInterval(INVT);INV=null;S.meth=id;document.querySelectorAll("#tmeths .chip").forEach(c=>c.classList.toggle("on",c.dataset.id===id));methInfo()}
  else if(k==="order")openOrder(id);
  else if(k==="logout"){await sb.auth.signOut({scope:"local"});setUser(null);location.hash="#/shop"}
  else if(k==="pw")authUI("newpass");
@@ -231,7 +276,7 @@ document.addEventListener("submit",async e=>{
 });
 
 // ---------- plug-in API for support.js and staff.js ----------
-window.AV={C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rpc,emsg,paint,route,V,rank,loadProfile,chrome,uuid,pillS,login,act:{},form:{}};
+window.AV={C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rpc,emsg,paint,route,V,rank,can,ROLEP,loadProfile,chrome,uuid,pillS,login,act:{},form:{}};
 
 // ---------- boot ----------
 if(!ready){app.innerHTML=`<div class="box cfg ctr">${astroPose("guide",100)}<h2>Almost there</h2><p class="en">Open <b>config.js</b> and paste your Supabase URL and publishable key. Then run <b>supabase/schema.sql</b> in the Supabase SQL Editor. See NEXT_STEPS.md.</p></div>`;$("acct").classList.add("hide")}

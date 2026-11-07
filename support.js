@@ -47,7 +47,7 @@ async function load(id){
  return{t:tr.data,m:mr.data||[]};
 }
 function head(t){
- const staffView=A.rank()>=1&&t.user_id!==S.user.id,closed=t.status==="closed";
+ const staffView=A.can("tickets")&&t.user_id!==S.user.id,closed=t.status==="closed";
  let acts="";
  if(staffView){
   if(!t.assigned_to&&!closed)acts+=`<button class="btn p" data-a="tclaim" data-id="${t.id}">Claim this ticket</button> `;
