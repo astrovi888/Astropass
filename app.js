@@ -92,7 +92,7 @@ async function loadProfile(){
 async function setUser(u){if(u&&S.user&&S.user.id===u.id)return;S.user=u;S.profile=null;if(u)await loadProfile();if(window.AV&&AV.onAuth)AV.onAuth(u);chrome();route()}
 // Header chips + bottom bar. Staff tab appears for agent and above (rank>=1).
 function chrome(){
- const p=S.profile,bc=$("balchip"),ac=$("acct");bc.classList.toggle("hide",!S.user);bc.textContent="💳 "+money(p&&p.balance);
+ const p=S.profile,bc=$("balchip"),ac=$("acct");bc.classList.toggle("hide",!S.user);bc.innerHTML=(p&&Number(p.balance)>0)?"<b>"+money(p.balance)+"</b> <span style=\"color:var(--ac)\">＋</span>":"＋ Add money";bc.title="Your wallet: tap to add money";
  $("bell").classList.toggle("hide",!S.user);ac.classList.toggle("hide",!!S.user);
  const tabs=[["shop","🛍️","Shop"],["wallet","👛","Wallet"],["orders","📦","Orders"],["support","💬","Help"],["account","👤","Account"]];
  if(S.perms.length)tabs.push(["staff","🛠️","Staff"]);
@@ -108,7 +108,7 @@ function card(p){const inst=p.fulfillment==="instant",out=inst&&!p.stock_left&&!
 function shopGrid(){const l=S.catalog.filter(p=>(S.cat==="all"||p.category===S.cat)&&(!S.q||(p.name+" "+p.description).toLowerCase().includes(S.q)));return l.length?l.map(card).join(""):'<p class="en">Nothing here yet.</p>'}
 async function shop(t){
  const cats=[{id:"all",label:"All"}].concat(C.CATEGORIES);
- const html=()=>`<div class="box hero">${astroPose("hello",84)}<div><b>${esc(C.BRAND)}</b><p>Premium subscriptions at friendlier prices. Pay from your wallet, get it instantly or on request.</p></div></div><div class="trust"><span>🔒 Verified payments</span><span>↩️ Refund if we can’t deliver</span><span>💬 Human support</span></div><input id="sq" class="search" type="search" placeholder="Search products" value="${esc(S.q)}" autocomplete="off"><div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>`;
+ const html=()=>`<div class="box hero">${astroPose("hello",84)}<div><b>${esc(C.BRAND)}</b><p>Subscriptions and game top-ups at friendlier prices.</p></div></div><div class="steps"><div><i>1</i><b>Add money</b><small>to your wallet</small></div><div><i>2</i><b>Pick a product</b><small>and tap Buy</small></div><div><i>3</i><b>Get it</b><small>instantly or in hours</small></div></div>${S.user||localStorage.getItem("av_seen")?"":`<div class="box" style="margin-bottom:10px"><b>New here?</b> <a href="#" data-a="how">See how it works (30 seconds)</a></div>`}<div class="trust"><span>🔒 Verified payments</span><span>↩️ Refund if we can’t deliver</span><span>💬 Human support</span></div><input id="sq" class="search" type="search" placeholder="Search products" value="${esc(S.q)}" autocomplete="off"><div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>`;
  if(S.catalog.length)paint(t,html());else paint(t,'<div class="box ctr">Loading…</div>');
  try{S.catalog=await rpc("get_catalog");paint(t,html())}catch(e){paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Couldn’t load the shop. ${esc(emsg(e))}</p></div>`)}
 }
@@ -126,7 +126,7 @@ function openProduct(id,note){
  ${p.input_label?`<label for="buyin">${esc(p.input_label)}</label><input id="buyin" maxlength="200" autocomplete="off">`:""}
  ${p.terms?`<details class="mt"><summary>Terms &amp; warranty</summary><p class="en" style="font-size:14px">${esc(p.terms)}</p></details>`:""}
  ${S.user?`<p class="meta mt"><span>Your balance</span><span>${money(bal)}${need<=0?" → "+money(bal-p.price):""}</span></p>`:""}
- <p id="buymsg" class="au-m" role="status" style="color:#dc2626">${esc(note||"")}</p><div id="buyarea">${btn}</div>`);
+ <p class="lk">🔒 Paid from your wallet · ↩️ Refunded if we can’t deliver · 💬 Chat with us anytime</p><p id="buymsg" class="au-m" role="status" style="color:#dc2626">${esc(note||"")}</p><div id="buyarea">${btn}</div>`);
 }
 async function doBuy(){
  const p=S.catalog.find(x=>x.id===S.buy.id),inp=$("buyin");
@@ -148,7 +148,7 @@ async function doBuy(){
 // Methods are typed (binance_pay | crypto | bank | link | manual); each type shows only the fields it needs.
 let PM=[],INV=null,INVT=null,SET={};
 const usable=m=>m.coming_soon||m.kind==="manual"||!!m.details;
-const REFLAB={binance_pay:"Binance Pay order ID (from your receipt)",crypto:"Transaction hash (TXID)",address:"Transaction hash (TXID)",bank:"Transfer reference number"};
+const REFLAB={binance_pay:"Binance Pay order ID (from your receipt)",crypto:"Transaction hash (TXID)",address:"Transaction hash (TXID)",bank:"Transfer reference number",pay_id:"Payment / order ID from your receipt"};
 async function wallet(t){
  if(!S.user)return paint(t,login());
  await loadProfile();chrome();clearInterval(INVT);INV=null;
@@ -159,16 +159,16 @@ async function wallet(t){
  const rate=parseInt(SET.coin_redeem||"100"),coins=(S.profile&&S.profile.coins)||0,redeemable=Math.floor(coins/rate)*rate;
  paint(t,`<div class="box wal"><span class="en">Wallet balance</span><b>${money(S.profile&&S.profile.balance)}</b><span class="en" style="font-size:13px">$1 = 1.00 site balance</span></div>
  <div class="box mt coinbox"><div><b>🪙 ${coins} AstroCoins</b><div class="lk">Earn ${esc(SET.coin_earn||"2")} per $1 you spend · ${rate} coins = $1</div></div>${redeemable?`<button class="btn" data-a="redeem">Redeem ${redeemable} → ${money(redeemable/rate)}</button>`:""}</div>
- <div class="box mt"><h2>Add funds</h2><label for="tamt">Amount (USD, ${money(T.min)}–${money(T.max)})</label><div>${T.presets.map(a=>`<button type="button" class="chip" data-a="amt" data-v="${a}">${money(a)}</button>`).join("")}</div>
+ <div class="box mt"><h2>Add money</h2><p class="en" style="font-size:14px">Add money to your wallet, then spend it in the shop. Three quick steps.</p><label for="tamt">① How much? (${money(T.min)}–${money(T.max)})</label><div>${T.presets.map(a=>`<button type="button" class="chip" data-a="amt" data-v="${a}">${money(a)}</button>`).join("")}</div>
  <input id="tamt" type="number" min="${T.min}" max="${T.max}" step="0.01" value="${pre}">
- <label>Payment method</label><div id="tmeths">${PM.map(m=>`<button type="button" class="chip${S.meth===m.id?" on":""}" data-a="meth" data-id="${esc(m.id)}" ${m.coming_soon?"disabled":""}>${esc(m.label)}${m.coming_soon?" · soon":""}</button>`).join("")||'<span class="en">No payment method is set up yet.</span>'}</div>
+ <label>② How do you want to pay?</label><div id="tmeths">${PM.map(m=>`<button type="button" class="chip${S.meth===m.id?" on":""}" data-a="meth" data-id="${esc(m.id)}" ${m.coming_soon?"disabled":""}>${esc(m.label)}${m.coming_soon?" · soon":""}</button>`).join("")||'<span class="en">No payment method is set up yet.</span>'}</div>
  <div id="tinfo" class="note"></div><div id="tauto"></div>
- <details id="tdet" class="mt"><summary id="tsum">Already paid but not credited? Send proof</summary>
+ <details id="tdet" class="mt"><summary id="tsum">③ I’ve paid: send proof</summary>
  <form data-f="topup"><label for="tname">Name on the payment (sender name)</label><input id="tname" maxlength="100" required autocomplete="off">
  <label for="tref" id="trlab">Reference</label><input id="tref" maxlength="200" required autocomplete="off">
  <label for="tfile">Screenshot of the payment (PNG/JPG, max 5 MB)</label><input id="tfile" type="file" accept="image/png,image/jpeg,image/webp" required>
  <div style="height:12px"></div><button class="btn p">Submit for verification</button></form></details>
- <p id="tmsg" class="au-m" role="status"></p><p class="lk">Manual proofs are verified by hand, ${esc(T.eta)}. Fake or reused proofs are rejected.</p></div>
+ <p id="tmsg" class="au-m" role="status"></p><p class="lk">🔒 Every payment is verified before it is added. Manual proofs take ${esc(T.eta)}.</p></div>
  <h3>Top-up requests</h3>${tp.data&&tp.data.length?tp.data.map(r=>`<div class="tx"><span>${money(r.amount)} · ${esc(r.method)}<small>${when(r.created_at)}${r.admin_note?" · "+esc(r.admin_note):""}</small></span><span class="pill ${r.status==="approved"?"ok":r.status==="pending"?"wait":"no"}">${r.status==="approved"?"verified":r.status}</span></div>`).join(""):'<p class="en">None yet.</p>'}
  <h3>Activity</h3>${tx.data&&tx.data.length?tx.data.map(r=>`<div class="tx"><span>${esc(r.note||r.kind)}<small>${when(r.created_at)}</small></span><span class="${r.amount>0?"pos":"neg"}">${r.amount>0?"+":""}${money(r.amount)}</span></div>`).join(""):'<p class="en">No activity yet.</p>'}`);
  methInfo();
@@ -177,6 +177,7 @@ async function wallet(t){
 function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;if(!m){i.textContent="";$("tauto").innerHTML="";return}
  const meta=m.meta||{},cp=(id,txt)=>`<div class="cred" id="${id}">${esc(txt)}</div><button type="button" class="btn" data-a="copyel" data-id="${id}">Copy</button>`;let h="";
  if(m.kind==="binance_pay")h=`<p>Open Binance → <b>Pay</b> → <b>Send</b>, scan the QR or enter this Pay ID, and send in <b>USDT</b>.</p><p class="meta"><span>Binance Pay ID</span></p>${cp("c1",m.details)}${meta.name?`<p class="lk">Account name: ${esc(meta.name)}</p>`:""}`;
+ else if(m.kind==="pay_id")h=`<p>Open the <b>${esc(meta.app||"payment")}</b> app, scan the QR or enter this ID, and send the amount.</p><p class="meta"><span>${esc(meta.app||"Payment")} ID</span></p>${cp("c1",m.details)}`;
  else if(m.kind==="crypto"||m.kind==="address")h=`<p class="warn">⚠️ Send only <b>${esc(meta.coin||"USDT")}</b> on the <b>${esc(meta.network||"correct")}</b> network. Anything sent on another network is lost.</p>${cp("c1",m.details)}`;
  else if(m.kind==="bank")h=`${meta.bank?`<p class="meta"><span>Bank</span><b>${esc(meta.bank)}</b></p>`:""}${meta.holder?`<p class="meta"><span>Account holder</span><b>${esc(meta.holder)}</b></p>`:""}${cp("c1",m.details)}`;
  else if(m.kind==="link"&&/^https:\/\//.test(m.details))h=`<a class="btn p" style="display:block;text-decoration:none" href="${esc(m.details)}" target="_blank" rel="noopener">Open payment page</a>`;
@@ -184,7 +185,7 @@ function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;
  if(m.instructions)h+=`<p class="lk">${esc(m.instructions)}</p>`;
  i.innerHTML=h;$("trlab").textContent=REFLAB[m.kind]||"Reference";
  $("tauto").innerHTML=m.auto_verify?`<button type="button" class="btn p" data-a="mkinv">Pay automatically</button><p class="lk">We give you an exact amount to send. Your wallet is credited automatically, usually within minutes. No screenshot needed.</p>`:"";
- $("tdet").open=!m.auto_verify;
+ $("tdet").open=!m.auto_verify;$("tsum").textContent=m.auto_verify?"Already paid but not credited? Send proof":"③ I’ve paid: send proof so we can add the money";
 }
 // Auto flow: reserve exact amount -> poll until credited / expired.
 async function mkInvoice(){
@@ -227,7 +228,7 @@ async function orders(t){
  if(!S.user)return paint(t,login());
  const{data,error}=await sb.from("orders").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(100);
  if(error)return paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Couldn’t load orders.</p></div>`);ORD=data;
- paint(t,ORD.length?`<h2>My orders</h2>`+ORD.map(o=>`<button class="item" data-a="order" data-id="${o.id}"><span><b>${esc(o.product_name)}</b><br><small class="lk">#AV-${o.number} · ${when(o.created_at)} · ${money(o.price)}</small></span>${pillS(o.status)}</button>`).join(""):`<div class="box ctr">${astroPose("empty",90)}<h2>No orders yet</h2><p class="en">Your purchases will show up here.</p><button class="btn p" data-go="shop">Browse the shop</button></div>`);
+ paint(t,ORD.length?`<h2>My orders</h2><p class="lk">Pending = received · Processing = we’re working on it · Completed = delivered. Tap an order for details.</p>`+ORD.map(o=>`<button class="item" data-a="order" data-id="${o.id}"><span><b>${esc(o.product_name)}</b><br><small class="lk">#AV-${o.number} · ${when(o.created_at)} · ${money(o.price)}</small></span>${pillS(o.status)}</button>`).join(""):`<div class="box ctr">${astroPose("empty",90)}<h2>No orders yet</h2><p class="en">Your purchases will show up here.</p><button class="btn p" data-go="shop">Browse the shop</button></div>`);
 }
 function openOrder(id){const o=ORD.find(x=>x.id===id);if(!o)return;
  sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button><b class="wt-w">${esc(o.product_name)}</b><p class="lk">Order #AV-${o.number}</p><p>${pillS(o.status)} <span class="lk">${money(o.price)} · ${when(o.created_at)}</span></p>
@@ -240,10 +241,13 @@ function openOrder(id){const o=ORD.find(x=>x.id===id);if(!o)return;
 // ---------- account ----------
 function account(t){
  if(!S.user)return paint(t,login());const p=S.profile||{};
- paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>${esc(p.username)}</b><div class="lk">${esc(p.email)} · ${esc(p.role)}</div></div></div><p>Balance: <b>${money(p.balance)}</b></p>
- <label for="th">Theme</label><select id="th"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
- <label><input type="checkbox" id="nt" ${p.notify_email!==false?"checked":""}> Email me order and support updates</label>
- <div style="height:14px"></div><button class="btn" data-a="pw">Change password</button><div style="height:8px"></div><button class="btn" data-a="logout">Log out</button></div>`);
+ paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>${esc(p.username)}</b><div class="lk">${esc(p.email)}</div></div></div>
+ <div class="acc3"><button data-go="wallet"><b>${money(p.balance)}</b><small>Wallet · add money</small></button><button data-go="orders"><b>📦</b><small>My orders</small></button><button data-go="support"><b>💬</b><small>Get help</small></button></div></div>
+ <h3>Settings</h3><div class="box"><label for="th">Appearance</label><select id="th"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
+ <label class="chk"><input type="checkbox" id="nt" ${p.notify_email!==false?"checked":""}> <span>Email me order and support updates</span></label></div>
+ <h3>Security</h3><div class="box"><p class="en" style="font-size:14px">We never ask for your password or codes. Staff will never message you first asking for them.</p><button class="btn" data-a="pw">Change password</button></div>
+ <h3>Learn more</h3><div class="box row"><button class="btn" data-a="how">How it works</button><button class="btn" data-a="faq">FAQ</button><button class="btn" data-a="refunds">Refunds</button></div>
+ <div style="height:10px"></div><button class="btn" data-a="logout">Log out</button>`);
  $("th").value=localStorage.getItem("av_theme")||"auto";
 }
 
@@ -291,6 +295,9 @@ document.addEventListener("submit",async e=>{
 window.AV={C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rpc,emsg,paint,route,V,rank,can,ROLEP,loadProfile,chrome,uuid,pillS,login,act:{},form:{}};
 
 // ---------- boot ----------
+// Start only after ALL scripts (support.js, staff.js, legal.js) have registered their screens; otherwise a page reload on #/staff or #/support
+// could route before those screens exist and fall back to the shop.
+function start(){
 if(!ready){app.innerHTML=`<div class="box cfg ctr">${astroPose("guide",100)}<h2>Almost there</h2><p class="en">Open <b>config.js</b> and paste your Supabase URL and publishable key. Then run <b>supabase/schema.sql</b> in the Supabase SQL Editor. See NEXT_STEPS.md.</p></div>`;$("acct").classList.add("hide")}
 else{chrome();route();
  // Email-link problems used to fail silently. Now: expired/used link -> clear message + fresh reset; valid recovery link -> password form.
@@ -299,5 +306,7 @@ else{chrome();route();
  else if(/type=(signup|email|magiclink|invite)/.test(H0))setTimeout(()=>pop("✅ Email confirmed. You’re logged in."),1500);   // email link confirmed the account and logged in
  else if(/type=recovery/.test(H0))setTimeout(()=>{if($("md").classList.contains("hide"))authUI("newpass")},1500);
  sb.auth.onAuthStateChange((ev,s)=>setTimeout(()=>{if(ev==="PASSWORD_RECOVERY")authUI("newpass");setUser(s&&s.user||null)},0));}
+}
+if(document.readyState==="complete")start();else addEventListener("load",start);
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol))addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 })();

@@ -8,22 +8,27 @@ const A=window.AV;if(!A||!A.sb)return;
 const {S,sb,$,esc,money,when,pop,sheet,closeSheet,rpc,emsg,paint,V,act,form}=A;
 const X='<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button>';
 const RK={customer:0,agent:1,admin:2,coowner:3,owner:4};
-const TABS=[["overview","Overview","orders"],["queue","Queue","tickets"],["orders","Orders","orders"],["topups","Top-ups","topups"],["products","Products","products"],["users","Users","users_view"],["team","Team","staff_manage"],["pay","Payments","payments"]];   // [id, label, permission needed]
+const TABS=[["overview","Overview","orders","📊","Sales and what needs attention"],["queue","Tickets","tickets","💬","Customer support chats"],["orders","Orders","orders","📦","Fulfil and track orders"],["topups","Top-ups","topups","💳","Verify payments, add money"],["products","Products","products","🏷️","Prices, stock, new items"],["users","Customers","users_view","👥","Find anyone, add money, place orders"],["team","Team","staff_manage","🛡️","Roles, permissions, audit log"],["pay","Payment methods","payments","🏦","Where customers send money"]];   // [id, label, permission needed, icon, description]
+const CI={order:"📦",payment:"💳",topup:"💳",refund:"↩️",account:"👤",password:"🔑",product:"🎁",other:"💬"};   // ticket topic icons
 const pillT=s=>`<span class="pill ${s==="approved"?"ok":s==="pending"?"wait":"no"}">${s==="approved"?"verified":s}</span>`;
 
 // ---------- shell: tab bar with live "needs attention" counts ----------
+// STAFF HOME = big tiles (one per job) + a customer search box. Tapping a tile opens that section with a "← Staff home" button.
 V.staff=async t=>{
  if(!A.S.perms.length)return paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Staff only.</p></div>`);
- const tabs=TABS.filter(x=>A.can(x[2]));if(!tabs.find(x=>x[0]===A.staffTab))A.staffTab=tabs[0][0];
- const head=n=>`<div class="seg">${tabs.map(x=>`<button data-a="stab" data-id="${x[0]}" class="${A.staffTab===x[0]?"on":""}">${x[1]}${n[x[0]]?` (${n[x[0]]})`:""}</button>`).join("")}</div>`;
- const cnt=q=>q.then(r=>r.count||0,()=>0);
- const n={queue:!A.can("tickets")?0:await cnt(sb.from("tickets").select("id",{count:"exact",head:true}).is("assigned_to",null).in("status",["open","pending"]))};
+ const tabs=TABS.filter(x=>A.can(x[2])),cur=tabs.find(x=>x[0]===A.staffTab);
+ if(cur){let body;try{body=await TAB[cur[0]]()}catch(e){body=`<p class="neg">Error: ${esc(e.message)}</p>`}
+  return paint(t,`<button class="btn back" data-a="stab" data-id="home">← Staff home</button><h2>${cur[3]} ${cur[1]}</h2>`+body)}
+ const cnt=q=>q.then(r=>r.count||0,()=>0),n={};
+ if(A.can("tickets"))n.queue=await cnt(sb.from("tickets").select("id",{count:"exact",head:true}).is("assigned_to",null).in("status",["open","pending"]));
  if(A.can("orders"))n.orders=await cnt(sb.from("orders").select("id",{count:"exact",head:true}).in("status",["pending","processing"]));
-  if(A.can("topups"))n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"));
- let body;try{body=await TAB[A.staffTab]()}catch(e){body=`<p class="neg">Error: ${esc(e.message)}</p>`}
- paint(t,head(n)+body);
+ if(A.can("topups"))n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"));
+ const todo=[n.topups&&n.topups+" payment(s) to verify",n.orders&&n.orders+" order(s) to fulfil",n.queue&&n.queue+" ticket(s) waiting"].filter(Boolean);
+ paint(t,`<h2>Staff</h2><form data-f="usearch" class="sfind"><input id="uq" placeholder="🔎 Find a customer: username or email" required autocomplete="off"><button class="btn p">Find</button></form><div id="ures"></div>
+  <p class="en">${todo.length?"Needs you now: "+todo.join(" · "):"✅ Nothing is waiting for you."}</p>
+  <div class="tiles">${tabs.map(x=>`<button class="tile2" data-a="stab" data-id="${x[0]}">${n[x[0]]?`<i class="bdg">${n[x[0]]}</i>`:""}<span class="ti">${x[3]}</span><b>${x[1]}</b><small>${x[4]}</small></button>`).join("")}</div>`);
 };
-act.stab=el=>{A.staffTab=el.dataset.id;A.route()};
+act.stab=el=>{A.staffTab=el.dataset.id==="home"?null:el.dataset.id;A.route()};
 const run=async(fn,args,ok)=>{try{await rpc(fn,args);pop(ok||"Done");closeSheet();A.route()}catch(e){pop(emsg(e))}};
 const TAB={};
 
@@ -50,7 +55,7 @@ TAB.overview=async()=>{
 // ---------- QUEUE: support tickets (agent+) ----------
 TAB.queue=async()=>{
  const{data,error}=await sb.from("tickets").select("*").in("status",["open","pending"]).order("last_message_at");if(error)throw error;
- const me=S.user.id,row=k=>`<div class="item"><span><b>#${k.number} ${esc(k.subject)}</b><br><small class="lk">${esc(k.customer_name)} · ${esc(k.category)} · ${when(k.last_message_at)}${k.assigned_name?" · "+esc(k.assigned_name):""}</small></span>
+ const me=S.user.id,row=k=>`<div class="item"><span><b>${CI[k.category]||"💬"} #${k.number} ${esc(k.subject)}</b><br><small class="lk">${esc(k.customer_name)} · ${esc(k.category)} · ${when(k.last_message_at)}${k.assigned_name?" · "+esc(k.assigned_name):""}</small></span>
   <span>${k.assigned_to?"":`<button class="btn p" data-a="qclaim" data-id="${k.id}">Claim</button> `}<button class="btn" data-a="openticket" data-id="${k.id}">Open</button></span></div>`;
  const un=data.filter(k=>!k.assigned_to),mine=data.filter(k=>k.assigned_to===me),oth=data.filter(k=>k.assigned_to&&k.assigned_to!==me);
  const{data:done}=await sb.from("tickets").select("*").in("status",["resolved","closed"]).order("last_message_at",{ascending:false}).limit(30);   // oversight: read any past chat
@@ -63,7 +68,7 @@ TAB.orders=async()=>{
  const{data,error}=await sb.from("orders").select("*,profiles(username,email)").order("created_at",{ascending:false}).limit(100);if(error)throw error;
  const card=o=>`<div class="box mt"><b>#AV-${o.number} ${esc(o.product_name)}</b> ${A.pillS(o.status)} ${money(o.price)}
   <div class="lk">@${esc(o.profiles&&o.profiles.username)} · ${esc(o.profiles&&o.profiles.email)} · ${when(o.created_at)}</div>
-  ${o.buyer_input?`<div class="cred">${esc(o.buyer_input)}</div>`:""}${o.admin_note?`<div class="lk">Note: ${esc(o.admin_note)}</div>`:""}
+  <button class="btn" data-a="ucard" data-id="${o.user_id}" style="margin:6px 0">Customer</button>${o.buyer_input?`<div class="cred">${esc(o.buyer_input)}</div>`:""}${o.admin_note?`<div class="lk">Note: ${esc(o.admin_note)}</div>`:""}
   ${o.status!=="cancelled"?`<textarea rows="2" id="d-${o.id}" placeholder="Delivery details shown to the buyer (optional)">${esc(o.delivery||"")}</textarea><div class="row mt">
   ${o.status==="pending"?`<button class="btn" data-a="oset" data-id="${o.id}" data-s="processing">Start processing</button>`:""}
   <button class="btn p" data-a="oset" data-id="${o.id}" data-s="completed">${o.status==="completed"?"Save delivery":"Mark completed"}</button>
@@ -76,15 +81,15 @@ act.ocancel=el=>{if(confirm("Cancel this order and refund the buyer?"))run("admi
 
 // ---------- TOP-UPS (admin+): verify name + transaction ID + screenshot, then credit ----------
 TAB.topups=async()=>{
- const{data,error}=await sb.from("topup_requests").select("*,profiles(username,email)").order("created_at",{ascending:false}).limit(60);if(error)throw error;
+ const{data,error}=await sb.from("topup_requests").select("*,profiles!topup_requests_user_id_fkey(username,email)").order("created_at",{ascending:false}).limit(60);if(error)throw error;
  const dup=r=>data.some(x=>x.id!==r.id&&x.reference.toLowerCase()===r.reference.toLowerCase());
  const card=r=>`<div class="box mt"><b>@${esc(r.profiles&&r.profiles.username)}</b> claims ${money(r.amount)} via ${esc(r.method)} ${pillT(r.status)}
   <div class="lk">${esc(r.profiles&&r.profiles.email)} · ${when(r.created_at)}</div>
   <p class="meta"><span>Sender name</span><span>${esc(r.sender_name||"—")}</span></p><p class="meta"><span>Transaction ID</span><span>${esc(r.reference)}</span></p>
   ${dup(r)?'<p class="neg">⚠ This transaction ID appears more than once.</p>':""}
-  <button class="btn" data-a="proof" data-p="${esc(r.proof_path||"")}">View screenshot</button>
+  <button class="btn" data-a="proof" data-p="${esc(r.proof_path||"")}">View screenshot</button> <button class="btn" data-a="ucard" data-id="${r.user_id}">Customer</button>
   ${r.status==="pending"?`<label for="a-${r.id}">Amount that actually arrived</label><input id="a-${r.id}" type="number" step="0.01" value="${r.amount}">
-   <div class="row mt"><button class="btn p" data-a="tapprove" data-id="${r.id}">Verify &amp; credit</button><button class="btn" data-a="treject" data-id="${r.id}">Reject</button></div>`
+   <div class="row mt"><button class="btn p" data-a="tapprove" data-id="${r.id}">✓ Verify &amp; add money</button><button class="btn" data-a="treject" data-id="${r.id}">Reject</button></div>`
    :`<div class="lk">${r.credited_amount?"Credited "+money(r.credited_amount):""} ${esc(r.admin_note||"")}</div>`}</div>`;
  const pend=data.filter(r=>r.status==="pending");
  return `<h3>To verify (${pend.length})</h3>${pend.map(card).join("")||'<p class="en">Nothing to verify.</p>'}<h3>History</h3>${data.filter(r=>r.status!=="pending").slice(0,20).map(card).join("")}`;
@@ -145,13 +150,29 @@ form.stock=async f=>{const raw=$("sk").value,items=/^---\s*$/m.test(raw)?raw.spl
 let UR=[],TEAM=[],PMS=[];
 const PL={tickets:"Read & answer all tickets",assign_tickets:"Assign tickets to others",orders:"Process / cancel orders",place_orders:"Place orders for customers",topups:"Verify payments (top-ups)",products:"Add / edit / delete products & stock",users_view:"See customers",wallet:"Add / remove wallet money",coins:"Grant AstroCoins & set rates",payments:"Edit payment methods",staff_manage:"Manage roles & permissions",audit:"See the audit log"};
 TAB.users=async()=>`<form data-f="usearch"><label for="uq">Search username or email</label><input id="uq" required><div style="height:10px"></div><button class="btn p">Search</button></form><div id="ures"></div>`;
-const ucard=u=>{const lower=RK[u.role]<A.rank(),b=[];
- if(A.can("wallet"))b.push(`<button class="btn" data-a="uadj" data-id="${u.id}">Add / remove money</button>`);
- if(A.can("coins"))b.push(`<button class="btn" data-a="ucoin" data-id="${u.id}">Coins</button>`);
- if(A.can("place_orders"))b.push(`<button class="btn" data-a="uorder" data-id="${u.id}">Place order</button>`);
+// Search result = compact row. Tapping opens the CUSTOMER CARD: balance, recent orders/ledger/tickets, and a ready-made "add money" form.
+const ucard=u=>`<button class="item" data-a="ucard" data-id="${u.id}"><span><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><br><small class="lk">${esc(u.email)} · ${money(u.balance)}</small></span><span>›</span></button>`;
+act.ucard=async el=>{const id=el.dataset.id;
+ const[p,o,w,k]=await Promise.all([sb.from("profiles").select("id,username,email,balance,role,coins,created_at,perm_grants,perm_revokes").eq("id",id).maybeSingle(),
+  sb.from("orders").select("number,product_name,price,status,created_at").eq("user_id",id).order("created_at",{ascending:false}).limit(5),
+  sb.from("wallet_transactions").select("amount,note,created_at").eq("user_id",id).order("created_at",{ascending:false}).limit(5),
+  sb.from("tickets").select("id,number,subject,status").eq("user_id",id).order("last_message_at",{ascending:false}).limit(3)]);
+ const u=p.data;if(!u)return pop("Customer not found");if(!UR.find(x=>x.id===u.id))UR.push(u);
+ const lower=RK[u.role]<A.rank(),b=[];
+ if(A.can("place_orders"))b.push(`<button class="btn" data-a="uorder" data-id="${u.id}">🛒 Place order</button>`);
+ if(A.can("coins"))b.push(`<button class="btn" data-a="ucoin" data-id="${u.id}">🪙 Coins</button>`);
  if(A.can("staff_manage")&&lower)b.push(`<button class="btn" data-a="urole" data-id="${u.id}">Role</button>`);
  if(A.can("staff_manage")&&lower&&RK[u.role]>=1)b.push(`<button class="btn" data-a="uperms" data-id="${u.id}">Permissions</button>`);
- return `<div class="box mt"><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><div class="lk">${esc(u.email)}</div>Balance: <b>${money(u.balance)}</b> · 🪙 ${u.coins||0}<div class="row mt">${b.join("")}</div></div>`};
+ sheet(`${X}<h2>@${esc(u.username)} <span class="pill">${esc(u.role)}</span></h2><p class="lk">${esc(u.email)} · joined ${when(u.created_at)}</p>
+ <div class="box wal" style="padding:12px"><span class="en">Wallet balance</span><b style="font-size:30px">${money(u.balance)}</b><span class="lk">🪙 ${u.coins||0} AstroCoins</span></div>
+ ${A.can("wallet")?`<form data-f="cadj" data-id="${u.id}"><label>Add money (use − to remove)</label><div>${[5,10,25,50].map(a=>`<button type="button" class="chip" data-a="qamt" data-v="${a}">+${a}</button>`).join("")}</div><input id="ca" type="number" step="0.01" required placeholder="Amount in USD"><label for="cn2">Reason (the customer sees this)</label><select id="cn2"><option>Top-up (payment received)</option><option>Refund</option><option>Goodwill credit</option><option>Correction</option></select><div style="height:10px"></div><button class="btn p">Apply to wallet</button></form>`:""}
+ <div class="row mt">${b.join("")}</div>
+ <h3>Recent orders</h3>${(o.data||[]).map(x=>`<div class="tx"><span>#AV-${x.number} ${esc(x.product_name)}<small>${when(x.created_at)}</small></span>${A.pillS(x.status)}</div>`).join("")||'<p class="en">None.</p>'}
+ <h3>Wallet activity</h3>${(w.data||[]).map(x=>`<div class="tx"><span>${esc(x.note||"")}<small>${when(x.created_at)}</small></span><span class="${x.amount>0?"pos":"neg"}">${x.amount>0?"+":""}${money(x.amount)}</span></div>`).join("")||'<p class="en">None.</p>'}
+ <h3>Tickets</h3>${(k.data||[]).map(x=>`<button class="item" data-a="openticket" data-id="${x.id}"><span>#${x.number} ${esc(x.subject)}</span><span class="pill">${esc(x.status)}</span></button>`).join("")||'<p class="en">None.</p>'}`)};
+act.qamt=el=>{$("ca").value=el.dataset.v};
+form.cadj=async f=>{const a=parseFloat($("ca").value);if(!a)return;if(!confirm((a>0?"Add ":"Remove ")+money(Math.abs(a))+" to this wallet?"))return;
+ try{await rpc("admin_adjust_balance",{p_user_id:f.dataset.id,p_amount:a,p_note:$("cn2").value});pop("Wallet updated");act.ucard({dataset:{id:f.dataset.id}})}catch(e){pop(emsg(e))}};
 form.usearch=async()=>{const q=$("uq").value.replace(/[^\w@.+\- ]/g,"").trim();
  const{data,error}=await sb.from("profiles").select("id,username,email,balance,role,coins,perm_grants,perm_revokes").or(`username.ilike.%${q}%,email.ilike.%${q}%`).limit(10);UR=data||[];
  $("ures").innerHTML=error?"<p class=neg>Error</p>":UR.map(ucard).join("")||"<p class=en>No match.</p>"};
@@ -193,6 +214,7 @@ form.coinrates=async()=>{try{await rpc("admin_set_setting",{p_key:"coin_earn",p_
 //  binance_pay: Pay ID (+name) | crypto: network + address | bank: bank, holder, IBAN | link: url | manual: text only
 const PT={
  binance_pay:{label:"Binance Pay",fields:[["details","Binance Pay ID","e.g. 216818778"],["name","Account name (optional)","e.g. ItsAstro"]],qr:true,auto:true},
+ pay_id:{label:"Payment app ID (RedotPay, etc.)",fields:[["details","Account ID","e.g. 1546339006"],["app","App name","e.g. RedotPay"]],qr:true},
  crypto:{label:"Crypto wallet (USDT)",fields:[["network","Network","TRC20 or BEP20"],["details","Wallet address",""]],qr:true,auto:true},
  bank:{label:"Bank / mobile transfer",fields:[["bank","Bank or service name",""],["holder","Account holder",""],["details","IBAN / RIB / account number",""]]},
  link:{label:"Payment link",fields:[["details","Link (https://…)",""]]},

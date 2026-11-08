@@ -6,6 +6,12 @@
 const A=window.AV;if(!A)return;
 const B=A.esc(A.C.BRAND),CT=A.esc(A.C.CONTACT.label),UPDATED="November 2026";
 const P={
+ how:["How it works",`<ol class="how"><li><b>Create a free account.</b><br>Takes a minute. Confirm your email with a code.</li>
+  <li><b>Add money to your wallet.</b><br>Tap your balance at the top, choose how to pay (crypto, Binance Pay, RedotPay), and follow the steps. Some payments are credited automatically; others are checked by our team within hours. $1 = 1.00 in your wallet.</li>
+  <li><b>Pick a product and tap Buy.</b><br>You always see the price and your balance before and after. Nothing is charged until you confirm.</li>
+  <li><b>Get it.</b><br>Instant items appear in Orders right away. Others are prepared by our team and you get a notification when they’re ready.</li>
+  <li><b>Need anything?</b><br>Open the Help tab and chat with a real person. If we can’t deliver, you’re refunded to your wallet.</li></ol>
+  <p class="lk">🔒 We will never ask for your password or codes. Never share them with anyone.</p><button class="btn p" data-a="closem">Got it</button>`],
  about:["About "+B,`<p>${B} sells digital subscriptions and game top-ups at friendlier prices. You add money to a prepaid wallet, pay from it, and receive your item instantly or processed by hand by our team.</p>
   <p>Real people run support: open a ticket and chat with us any time from the Help tab.</p>
   <p class="lk">${B} is an independent reseller. We are not affiliated with, endorsed by or sponsored by Netflix, Spotify, Google, Canva, Roblox, Valve, Krafton, Garena or any other brand shown. All trademarks belong to their owners.</p>`],
@@ -38,5 +44,5 @@ const P={
   <details><summary>My item stopped working.</summary><p class="en">Open the order and press "Need help with this order". We will replace or refund it within the warranty.</p></details>
   <details><summary>Why do you need a screenshot?</summary><p class="en">It protects you and us from fake payments, and it is only visible to the staff who verify it.</p></details>
   <details><summary>Is this official?</summary><p class="en">No. We are an independent reseller and not affiliated with the brands we sell.</p></details>`]};
-Object.keys(P).forEach(k=>{A.act[k]=()=>A.modal(`<h2>${P[k][0]}</h2>`+P[k][1])});
+Object.keys(P).forEach(k=>{A.act[k]=()=>{A.modal(`<h2>${P[k][0]}</h2>`+P[k][1]);if(k==="how")try{localStorage.setItem("av_seen","1")}catch(e){}}});
 })();

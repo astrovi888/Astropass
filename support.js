@@ -10,31 +10,38 @@ const TS={open:["Open","wait"],pending:["Agent replied","ok"],resolved:["Resolve
 const tpill=s=>`<span class="pill ${(TS[s]||["",""])[1]}">${(TS[s]||[s])[0]}</span>`;
 const X='<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button>';
 
-// ---------- customer: ticket list ----------
+// ---------- customer: help centre = pick a topic -> short form -> chat ----------
+// [id, icon, label, subject prefill, hint, needs an order picker]. ids must match create_ticket() in schema_v6.sql
+const CATS=[["order","📦","Order problem","Problem with my order","Which order, and what went wrong?",true],
+ ["payment","💳","Payment / top-up","Top-up not credited","Include the amount, the payment method and the transaction ID.",false],
+ ["refund","↩️","Refund request","Refund request","Which order, and why would you like a refund?",true],
+ ["password","🔑","Password / login","I can’t log in","Tell us the email on your account. Never send your password.",false],
+ ["account","👤","Account help","Account question","What do you need help with?",false],
+ ["product","🎁","Product not working","Product not working","Which product, and what happens when you use it?",true],
+ ["other","❓","Something else","","Tell us what you need.",false]];
+const CAT=Object.fromEntries(CATS.map(c=>[c[0],c]));
 V.support=async t=>{
  if(!S.user)return paint(t,A.login());
  const{data,error}=await sb.from("tickets").select("*").eq("user_id",S.user.id).order("last_message_at",{ascending:false}).limit(50);
  if(error)return paint(t,'<div class="box ctr"><p>Couldn’t load your tickets.</p></div>');
- paint(t,`<div class="box hero">${astroPose("guide",80)}<div><b>Need help?</b><p>Open a ticket and chat with our team. Typical reply: within a few hours.</p></div></div>
- <button class="btn p" data-a="newticket">+ New ticket</button>
- <h3>My tickets</h3>${data.length?data.map(k=>`<button class="item" data-a="openticket" data-id="${k.id}"><span><b>#${k.number} ${esc(k.subject)}</b><br><small class="lk">${k.assigned_name?esc(k.assigned_name)+" · ":""}${when(k.last_message_at)}</small></span>${tpill(k.status)}</button>`).join(""):'<p class="en">No tickets yet.</p>'}`);
+ paint(t,`<div class="box hero">${astroPose("guide",80)}<div><b>How can we help?</b><p>Pick a topic. A real person replies, usually within a few hours.</p></div></div>
+ <div class="tiles">${CATS.map(c=>`<button class="tile2" data-a="tkcat" data-c="${c[0]}"><span class="ti">${c[1]}</span><b>${c[2]}</b></button>`).join("")}</div>
+ <p class="lk" style="text-align:center"><a href="#" data-a="faq">Quick answers (FAQ)</a></p>
+ <h3>My tickets</h3>${data.length?data.map(k=>`<button class="item" data-a="openticket" data-id="${k.id}"><span><b>${(CAT[k.category]||CAT.other)[1]} #${k.number} ${esc(k.subject)}</b><br><small class="lk">${k.assigned_name?esc(k.assigned_name)+" · ":""}${when(k.last_message_at)}</small></span>${tpill(k.status)}</button>`).join(""):'<p class="en">No tickets yet.</p>'}`);
 };
 act.openticket=el=>openTicket(el.dataset.id);
-act.newticket=()=>newTicket();
-act.help=el=>newTicket(el.dataset.id);        // "Need help with this order?" button in the order sheet
-
-// ---------- customer: new ticket form ----------
-async function newTicket(orderId){
- const{data}=await sb.from("orders").select("id,number,product_name").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(20);
- sheet(`${X}<h2>New ticket</h2><form data-f="newticket">
- <label for="tc">Topic</label><select id="tc"><option value="order">An order</option><option value="payment">A payment / top-up</option><option value="account">My account</option><option value="other">Something else</option></select>
- <label for="to">Related order (optional)</label><select id="to"><option value="">None</option>${(data||[]).map(o=>`<option value="${o.id}" ${o.id===orderId?"selected":""}>#AV-${o.number} · ${esc(o.product_name)}</option>`).join("")}</select>
- <label for="ts">Subject</label><input id="ts" maxlength="120" required><label for="tb">Message</label><textarea id="tb" rows="4" maxlength="2000" required></textarea>
- <div style="height:12px"></div><button class="btn p">Send</button></form><p id="tkm" class="au-m" style="color:#dc2626"></p>`);
- if(orderId)$("tc").value="order";
-}
-form.newticket=async()=>{
- try{const id=await rpc("create_ticket",{p_subject:$("ts").value,p_category:$("tc").value,p_body:$("tb").value,p_order_id:$("to").value||null});
+act.tkcat=el=>newTicket(el.dataset.c);
+act.newticket=()=>newTicket("other");
+act.help=el=>newTicket("order",el.dataset.id);        // "Need help with this order?" button in the order sheet
+async function newTicket(cat,orderId){cat=CAT[cat]?cat:"other";const c=CAT[cat];let orders=[];
+ if(c[5]){const{data}=await sb.from("orders").select("id,number,product_name").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(20);orders=data||[]}
+ const o0=orders.find(o=>o.id===orderId),subj=o0?c[2]+": #AV-"+o0.number:c[3];
+ sheet(`${X}<h2>${c[1]} ${c[2]}</h2><p class="en" style="font-size:14px">${c[4]}</p><form data-f="newticket" data-cat="${cat}">
+ ${c[5]?`<label for="to">Which order?</label><select id="to"><option value="">Choose…</option>${orders.map(o=>`<option value="${o.id}" ${o.id===orderId?"selected":""}>#AV-${o.number} · ${esc(o.product_name)}</option>`).join("")}</select>`:""}
+ <label for="ts">Subject</label><input id="ts" maxlength="120" required value="${esc(subj)}"><label for="tb">Message</label><textarea id="tb" rows="4" maxlength="2000" required></textarea>
+ <p class="lk">🔒 Never share your password or codes. We will never ask for them.</p><div style="height:10px"></div><button class="btn p">Send</button></form><p id="tkm" class="au-m" style="color:#dc2626"></p>`)}
+form.newticket=async f=>{
+ try{const id=await rpc("create_ticket",{p_subject:$("ts").value,p_category:f.dataset.cat,p_body:$("tb").value,p_order_id:$("to")?($("to").value||null):null});
   closeSheet();pop("Ticket sent");openTicket(id);if(location.hash==="#/support")A.route()}
  catch(e){$("tkm").textContent=emsg(e)}
 };
@@ -50,6 +57,7 @@ function head(t){
  const staffView=A.can("tickets")&&t.user_id!==S.user.id,closed=t.status==="closed";
  let acts="";
  if(staffView){
+  if(A.can("users_view"))acts+=`<button class="btn" data-a="ucard" data-id="${t.user_id}">Customer &amp; wallet</button> `;
   if(!t.assigned_to&&!closed)acts+=`<button class="btn p" data-a="tclaim" data-id="${t.id}">Claim this ticket</button> `;
   if(t.status!=="resolved"&&!closed)acts+=`<button class="btn" data-a="tstatus" data-id="${t.id}" data-s="resolved">Resolve</button> `;
   if(!closed)acts+=`<button class="btn" data-a="tstatus" data-id="${t.id}" data-s="closed">Close</button>`;
