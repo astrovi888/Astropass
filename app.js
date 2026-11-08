@@ -18,6 +18,7 @@ const emsg=e=>ERR[e&&e.message]||(/fetch|network/i.test(e&&e.message||"")?"Netwo
 const theme=localStorage.getItem("av_theme");if(theme==="light"||theme==="dark")document.documentElement.dataset.theme=theme;
 $("brand").textContent=C.BRAND;document.title=C.BRAND;$("contact").textContent=C.CONTACT.label;$("contact").href=C.CONTACT.url;
 
+const H0=location.hash;   // captured BEFORE supabase-js consumes the URL: email links return tokens or errors in the #hash
 const ready=window.supabase&&/^https:\/\//.test(C.SUPABASE_URL)&&!/YOUR-/.test(C.SUPABASE_URL+C.SUPABASE_KEY);
 const sb=ready?window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_KEY):null;
 const S={user:null,profile:null,perms:[],catalog:[],cat:"all",q:"",pend:null,buy:null};
@@ -50,14 +51,18 @@ function authUI(m){
   login:`${tabs}<form data-f="login" class="au-f">${f("ae","Email","email","email")}${f("ap","Password","password","current-password")}${go("Log in")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="otp">Email me a code</a><a href="#" data-a="auth" data-m="reset">Forgot password?</a></p>`,
   signup:`${tabs}<form data-f="signup" class="au-f">${f("un","Username (3–20 letters/numbers)","text","username",'maxlength="20"')}${f("ae","Email","email","email")}${f("ap","Password (min 8)","password","new-password",'minlength="8"')}${f("ap2","Confirm password","password","new-password",'minlength="8"')}<label class="chk"><input type="checkbox" id="tos" required> <span>I agree to the Terms and Refund policy (links in the page footer).</span></label>${go("Send me a code")}</form>`,
   otp:`<h2>Log in with a code</h2><form data-f="otp" class="au-f">${f("ae","Email","email","email")}${go("Send code")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
-  code:`<h2>Enter your code</h2><p class="en" style="font-size:14px">We sent a code to <b>${esc(PEND&&PEND.email)}</b>.</p><form data-f="code" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="10"')}${go("Confirm")}</form>`,
+  code:`<h2>Enter your code</h2><p class="en" style="font-size:14px">We sent a code to <b>${esc(PEND&&PEND.email)}</b>. Type it below, or tap the button inside the email.</p><form data-f="code" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="10"')}${go("Confirm")}</form><p class="au-sub"><a href="#" data-a="resend">Resend code</a></p>`,
   reset:`<h2>Reset password</h2><form data-f="reset" class="au-f">${f("ae","Email","email","email")}${go("Send reset link")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
   newpass:`<h2>New password</h2><form data-f="newpass" class="au-f">${f("ap","New password","password","new-password",'minlength="8"')}${go("Save")}</form>`};
  modal(H+T[m]+'<p id="mm" class="au-m" role="status"></p>');const i=$("ae")||$("ap")||$("un")||$("cd");if(i)i.focus();
 }
+// Plain-language versions of Supabase auth errors.
+const friendly=m=>/rate limit/i.test(m)?"Too many emails were sent recently. Please wait a few minutes and try again.":/invalid login/i.test(m)?"Wrong email or password. If you just signed up, confirm your email first.":/not confirmed/i.test(m)?"Please confirm your email first: enter the code we sent, or tap the button in the email.":(/token|otp/i.test(m)&&/expired|invalid/i.test(m))?"That code is wrong or expired. Tap “Resend code” for a new one.":m;
 const msg=(t,bad)=>{const m=$("mm");if(m){m.textContent=t;m.style.color=bad?"#dc2626":"var(--mut)"}};
 async function authSubmit(mode){
- const em=$("ae")?$("ae").value.trim():"",pw=$("ap")?$("ap").value:"",back=location.origin+location.pathname;msg("Working…");
+ const em=$("ae")?$("ae").value.trim():"",pw=$("ap")?$("ap").value:"",back=location.origin+location.pathname;
+ if(mode==="login"&&em&&!em.includes("@"))return msg("Please log in with your email address (not your username).",true);
+ msg("Working…");
  try{let r;
   if(mode=="login")r=await sb.auth.signInWithPassword({email:em,password:pw});
   else if(mode=="signup"){const un=$("un").value.trim();
@@ -67,11 +72,17 @@ async function authSubmit(mode){
    if(!r.error&&!r.data.session){PEND={email:em,type:"signup"};return authUI("code")}}
   else if(mode=="otp"){r=await sb.auth.signInWithOtp({email:em,options:{shouldCreateUser:false}});if(!r.error){PEND={email:em,type:"email"};return authUI("code")}}
   else if(mode=="code")r=await sb.auth.verifyOtp({email:PEND.email,token:$("cd").value.trim(),type:PEND.type});
-  else if(mode=="reset"){r=await sb.auth.resetPasswordForEmail(em,{redirectTo:back});if(!r.error)return msg("Reset link sent. Check your email.")}
+  else if(mode=="reset"){r=await sb.auth.resetPasswordForEmail(em,{redirectTo:back});if(!r.error){PEND={email:em,type:"recovery"};return authUI("code")}}   // reset now uses a CODE too (needs {{ .Token }} in the Reset Password email template)
   else{r=await sb.auth.updateUser({password:pw});if(!r.error){msg("Password updated.");return setTimeout(closeModal,900)}}
-  if(r.error)return msg(r.error.message,true);closeModal();
+  if(r.error)return msg(friendly(r.error.message),true);if(mode=="code"&&PEND&&PEND.type==="recovery"){PEND=null;return authUI("newpass")}   // code accepted -> choose a new password
+  closeModal();
  }catch(e){msg("Network problem. Please try again.",true)}
 }
+// "Resend code": one email per minute, so people cannot burn the hourly email limit by tapping repeatedly.
+let RSAT=0;
+async function resendCode(){if(!PEND)return;if(Date.now()-RSAT<60000)return msg("Please wait a minute before asking for another code.",true);RSAT=Date.now();
+ try{const r=PEND.type==="signup"?await sb.auth.resend({type:"signup",email:PEND.email}):PEND.type==="recovery"?await sb.auth.resetPasswordForEmail(PEND.email,{redirectTo:location.origin+location.pathname}):await sb.auth.signInWithOtp({email:PEND.email,options:{shouldCreateUser:false}});
+  msg(r.error?friendly(r.error.message):"A new code is on its way.",!!r.error)}catch(e){msg("Network problem. Please try again.",true)}}
 async function loadProfile(){
  let r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins").eq("id",S.user.id).maybeSingle();
  if(r.error)r=await sb.from("profiles").select("id,username,email,balance,role,notify_email").eq("id",S.user.id).maybeSingle();   // older database without coins
@@ -262,6 +273,7 @@ document.addEventListener("click",async e=>{
  else if(k==="order")openOrder(id);
  else if(k==="logout"){await sb.auth.signOut({scope:"local"});setUser(null);location.hash="#/shop"}
  else if(k==="pw")authUI("newpass");
+ else if(k==="resend")resendCode();
  else if(AV.act[k])AV.act[k](a,e);   // actions registered by support.js / staff.js
 });
 document.addEventListener("change",async e=>{if(e.target.id==="nt"){try{await rpc("set_my_notify",{p_on:e.target.checked});S.profile.notify_email=e.target.checked;pop("Saved")}catch(x){pop(emsg(x))}return}
@@ -281,6 +293,11 @@ window.AV={C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rp
 // ---------- boot ----------
 if(!ready){app.innerHTML=`<div class="box cfg ctr">${astroPose("guide",100)}<h2>Almost there</h2><p class="en">Open <b>config.js</b> and paste your Supabase URL and publishable key. Then run <b>supabase/schema.sql</b> in the Supabase SQL Editor. See NEXT_STEPS.md.</p></div>`;$("acct").classList.add("hide")}
 else{chrome();route();
+ // Email-link problems used to fail silently. Now: expired/used link -> clear message + fresh reset; valid recovery link -> password form.
+ if(/error_description=|error_code=/.test(H0)){history.replaceState(null,"",location.pathname+"#/shop");
+  setTimeout(()=>{authUI("reset");msg("That link expired or was already used (some email apps open links before you do). Enter your email to get a fresh code.",true)},500)}
+ else if(/type=(signup|email|magiclink|invite)/.test(H0))setTimeout(()=>pop("✅ Email confirmed. You’re logged in."),1500);   // email link confirmed the account and logged in
+ else if(/type=recovery/.test(H0))setTimeout(()=>{if($("md").classList.contains("hide"))authUI("newpass")},1500);
  sb.auth.onAuthStateChange((ev,s)=>setTimeout(()=>{if(ev==="PASSWORD_RECOVERY")authUI("newpass");setUser(s&&s.user||null)},0));}
 if("serviceWorker" in navigator&&/^https?:/.test(location.protocol))addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 })();
