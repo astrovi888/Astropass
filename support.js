@@ -29,13 +29,14 @@ V.support=async t=>{
  <p class="lk" style="text-align:center"><a href="#" data-a="faq">Quick answers (FAQ)</a></p>
  <h3>My tickets</h3>${data.length?data.map(k=>`<button class="item" data-a="openticket" data-id="${k.id}"><span><b>${(CAT[k.category]||CAT.other)[1]} #${k.number} ${esc(k.subject)}</b><br><small class="lk">${k.assigned_name?esc(k.assigned_name)+" · ":""}${when(k.last_message_at)}</small></span>${tpill(k.status)}</button>`).join(""):'<p class="en">No tickets yet.</p>'}`);
 };
+A.newTicket=newTicket;
 act.openticket=el=>openTicket(el.dataset.id);
 act.tkcat=el=>newTicket(el.dataset.c);
 act.newticket=()=>newTicket("other");
 act.help=el=>newTicket("order",el.dataset.id);        // "Need help with this order?" button in the order sheet
-async function newTicket(cat,orderId){cat=CAT[cat]?cat:"other";const c=CAT[cat];let orders=[];
+async function newTicket(cat,orderId,subjOverride){cat=CAT[cat]?cat:"other";const c=CAT[cat];let orders=[];
  if(c[5]){const{data}=await sb.from("orders").select("id,number,product_name").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(20);orders=data||[]}
- const o0=orders.find(o=>o.id===orderId),subj=o0?c[2]+": #AV-"+o0.number:c[3];
+ const o0=orders.find(o=>o.id===orderId),subj=subjOverride||(o0?c[2]+": #AV-"+o0.number:c[3]);
  sheet(`${X}<h2>${c[1]} ${c[2]}</h2><p class="en" style="font-size:14px">${c[4]}</p><form data-f="newticket" data-cat="${cat}">
  ${c[5]?`<label for="to">Which order?</label><select id="to"><option value="">Choose…</option>${orders.map(o=>`<option value="${o.id}" ${o.id===orderId?"selected":""}>#AV-${o.number} · ${esc(o.product_name)}</option>`).join("")}</select>`:""}
  <label for="ts">Subject</label><input id="ts" maxlength="120" required value="${esc(subj)}"><label for="tb">Message</label><textarea id="tb" rows="4" maxlength="2000" required></textarea>

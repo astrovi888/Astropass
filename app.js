@@ -11,7 +11,7 @@ const when=d=>{try{return new Date(d).toLocaleString([],{dateStyle:"medium",time
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 function pop(t){const p=$("pop");p.textContent=t;p.className="";void p.offsetWidth;p.className="go"}
 async function copy(t){try{await navigator.clipboard.writeText(t);pop("Copied")}catch(e){pop("Copy failed")}}
-const ERR={insufficient_coins:"Not enough AstroCoins.",method_unavailable:"That payment method isn’t available.",invalid_permission:"Unknown permission.",busy_try_again:"Busy, please try again.",invalid_setting:"Invalid setting.",has_history:"This product has orders, so it can’t be deleted. Use Hide instead.",coming_soon:"This product is not live yet.",duplicate_reference:"That transaction ID was already used.",proof_required:"Please attach a screenshot of your payment.",ticket_closed:"This ticket is closed.",already_assigned:"Someone else already picked this up.",too_many_tickets:"You have 5 open tickets. Please wait for replies.",invalid_message:"Please write a subject and a message.",not_assigned:"This ticket belongs to another agent.",invalid_status:"Invalid status.",invalid_role:"Invalid role.",not_found:"Not found.",not_authenticated:"Please log in first.",insufficient_funds:"Your balance is too low. Top up first.",out_of_stock:"Sorry, this just sold out.",product_unavailable:"This product is no longer available.",input_required:"Please fill in the required detail.",price_changed:"The price just changed. Please review it.",too_many_pending:"You already have 3 pending top-ups. Wait for approval.",invalid_amount:"Invalid amount.",invalid_reference:"Please enter the payment reference.",forbidden:"Not allowed.",already_decided:"Already handled.",not_pending:"Order is not pending.",order_cancelled:"Order was cancelled."};
+const ERR={not_completed:"You can review an order after it is completed.",already_reviewed:"You already reviewed this order.",insufficient_coins:"Not enough AstroCoins.",method_unavailable:"That payment method isn’t available.",invalid_permission:"Unknown permission.",busy_try_again:"Busy, please try again.",invalid_setting:"Invalid setting.",has_history:"This product has orders, so it can’t be deleted. Use Hide instead.",coming_soon:"This product is not live yet.",duplicate_reference:"That transaction ID was already used.",proof_required:"Please attach a screenshot of your payment.",ticket_closed:"This ticket is closed.",already_assigned:"Someone else already picked this up.",too_many_tickets:"You have 5 open tickets. Please wait for replies.",invalid_message:"Please write a subject and a message.",not_assigned:"This ticket belongs to another agent.",invalid_status:"Invalid status.",invalid_role:"Invalid role.",not_found:"Not found.",not_authenticated:"Please log in first.",insufficient_funds:"Your balance is too low. Top up first.",out_of_stock:"Sorry, this just sold out.",product_unavailable:"This product is no longer available.",input_required:"Please fill in the required detail.",price_changed:"The price just changed. Please review it.",too_many_pending:"You already have 3 pending top-ups. Wait for approval.",invalid_amount:"Invalid amount.",invalid_reference:"Please enter the payment reference.",forbidden:"Not allowed.",already_decided:"Already handled.",not_pending:"Order is not pending.",order_cancelled:"Order was cancelled."};
 const emsg=e=>ERR[e&&e.message]||(/fetch|network/i.test(e&&e.message||"")?"Network problem. Try again.":"Something went wrong. Please try again.");
 
 // theme
@@ -84,7 +84,7 @@ async function resendCode(){if(!PEND)return;if(Date.now()-RSAT<60000)return msg(
  try{const r=PEND.type==="signup"?await sb.auth.resend({type:"signup",email:PEND.email}):PEND.type==="recovery"?await sb.auth.resetPasswordForEmail(PEND.email,{redirectTo:location.origin+location.pathname}):await sb.auth.signInWithOtp({email:PEND.email,options:{shouldCreateUser:false}});
   msg(r.error?friendly(r.error.message):"A new code is on its way.",!!r.error)}catch(e){msg("Network problem. Please try again.",true)}}
 async function loadProfile(){
- let r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins").eq("id",S.user.id).maybeSingle();
+ let r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins,user_no").eq("id",S.user.id).maybeSingle();
  if(r.error)r=await sb.from("profiles").select("id,username,email,balance,role,notify_email").eq("id",S.user.id).maybeSingle();   // older database without coins
  S.profile=r.data;
  try{S.perms=(await rpc("my_perms"))||[]}catch(e){S.perms=(S.profile&&ROLEP[S.profile.role])||[]}
@@ -103,30 +103,67 @@ const mark=()=>document.querySelectorAll("#bbar button").forEach(b=>b.classList.
 
 // ---------- shop ----------
 const catLabel=id=>(C.CATEGORIES.find(c=>c.id===id)||{label:"Other"}).label;
-function card(p){const inst=p.fulfillment==="instant",out=inst&&!p.stock_left&&!p.coming_soon,sv=p.retail_price>p.price?Math.round((1-p.price/p.retail_price)*100):0;
- return `<button class="pcard${out?" out":""}" data-a="product" data-id="${esc(p.id)}"><div class="pi">${esc(p.icon)}</div><div class="pn">${esc(p.name)}</div><div class="pd">${esc(p.duration_label)}</div><div class="pprice"><b>${money(p.price)}</b>${sv?`<s>${money(p.retail_price)}</s>`:""}</div><div class="pbd">${sv?`<span class="pill ok">−${sv}%</span>`:""}<span class="pill">${inst?"⚡ Instant":"🕒 On request"}</span>${p.coming_soon?'<span class="pill wait">Coming soon</span>':out?'<span class="pill no">Sold out</span>':inst&&p.stock_left<=3?`<span class="pill wait">${p.stock_left} left</span>`:""}</div></button>`}
-function shopGrid(){const l=S.catalog.filter(p=>(S.cat==="all"||p.category===S.cat)&&(!S.q||(p.name+" "+p.description).toLowerCase().includes(S.q)));return l.length?l.map(card).join(""):'<p class="en">Nothing here yet.</p>'}
+// ---- helpers for offers: country availability, delivery speed text ----
+const CC="AE AL AR AT AU AZ BA BD BE BG BH BR CA CH CL CN CO CY CZ DE DK DZ EE EG ES FI FR GB GE GR HK HR HU ID IE IL IN IQ IT JO JP KE KR KW LB LT LU LV LY MA MD MX MY NG NL NO NZ OM PE PH PK PL PT QA RO RS RU SA SD SE SG SI SK SN TH TN TR TW UA US UY VN YE ZA".split(" ");
+const cname=c=>{try{return new Intl.DisplayNames(["en"],{type:"region"}).of(c)}catch(e){return c}};
+const TZC={"Africa/Tunis":"TN","Africa/Algiers":"DZ","Africa/Casablanca":"MA","Africa/Cairo":"EG","Africa/Tripoli":"LY","Asia/Riyadh":"SA","Asia/Dubai":"AE","Asia/Qatar":"QA","Asia/Kuwait":"KW","Europe/Paris":"FR","Europe/London":"GB","Europe/Berlin":"DE","Europe/Madrid":"ES","Europe/Rome":"IT","Europe/Istanbul":"TR","America/New_York":"US","America/Chicago":"US","America/Los_Angeles":"US"};
+S.country=localStorage.getItem("av_country")||TZC[(Intl.DateTimeFormat().resolvedOptions().timeZone)||""]||"";S.brand="";S.sub="";S.sort="";
+const spd=m=>(m==null||m<=0)?"Instant":m<60?m+" min"+(m==1?"":"s"):m<1440?Math.round(m/60)+" hour"+(Math.round(m/60)==1?"":"s"):Math.round(m/1440)+" day(s)";
+// Can this offer be used in the visitor's chosen country? (a guide, not enforcement: customers pick their own country)
+function region(p){const L=p.region_list||[],c=S.country,m=p.region_mode||"global";
+ if(m==="global")return{ok:true,short:"",text:"🌍 Worldwide"};
+ const names=L.map(cname).join(", "),ok=!c||(m==="only"?L.includes(c):!L.includes(c));
+ return{ok,short:ok?"":"⚠️ Not in "+cname(c),text:(m==="only"?"Only in: ":"Not available in: ")+names+(c?(ok?" · ✅ works in "+cname(c):" · ⚠️ not available in "+cname(c)):"")}}
+let ST=null;
+function card(p){const stock=p.stock_left,out=!p.coming_soon&&stock!=null&&stock<=0,d=(p.discount_percent||0)>0,rg=region(p),reg=p.regular_price!=null?p.regular_price:p.price;
+ const was=d?reg:(p.retail_price>p.price?p.retail_price:null),sv=!d&&was?Math.round((1-p.price/was)*100):0;
+ return `<button class="pcard${out||!rg.ok?" out":""}" data-a="product" data-id="${esc(p.id)}"><div class="pi">${esc(p.icon)}</div><div class="pn">${esc(p.name)}</div><div class="pd">${esc(p.duration_label)}${p.brand?" · "+esc(p.brand):""}</div>
+ <div class="pprice"><b>${money(p.price)}</b>${was?`<s class="red">${money(was)}</s>`:""}</div>
+ <div class="pbd">${d?`<span class="pill hot">−${p.discount_percent}%</span>`:sv?`<span class="pill ok">−${sv}%</span>`:""}${p.trending?'<span class="pill hot">🔥 Trending</span>':""}${p.featured?'<span class="pill">⭐ Featured</span>':""}<span class="pill">${p.fulfillment==="instant"?"⚡ Instant":p.delivery_minutes>0?"🕒 "+spd(p.delivery_minutes):"🕒 On request"}</span>${p.coming_soon?'<span class="pill wait">Coming soon</span>':out?'<span class="pill no">Sold out</span>':stock!=null&&stock<=3?`<span class="pill wait">${stock} left</span>`:""}${!rg.ok?`<span class="pill no">${esc(rg.short)}</span>`:""}</div>
+ <div class="pd">${p.review_count?`👍 ${Math.round(p.positive_pct)}% · `:""}${p.sold?p.sold+" sold":"New"}</div></button>`}
+function shopGrid(){let l=S.catalog.filter(p=>(S.cat==="all"||p.category===S.cat)&&(!S.brand||p.brand===S.brand)&&(!S.sub||p.subcategory===S.sub)&&(!S.q||(p.name+" "+p.description+" "+(p.brand||"")).toLowerCase().includes(S.q)));
+ if(S.sort==="low")l=l.slice().sort((a,b)=>a.price-b.price);else if(S.sort==="high")l=l.slice().sort((a,b)=>b.price-a.price);else if(S.sort==="best")l=l.slice().sort((a,b)=>(b.sold||0)-(a.sold||0));
+ return l.length?l.map(card).join(""):'<p class="en">Nothing here yet.</p>'}
+// Collapsed "Filters" box keeps the shop clean: my country, brand, type, sort.
+function filterBar(){const brands=[...new Set(S.catalog.map(p=>p.brand).filter(Boolean))].sort(),subs=[...new Set(S.catalog.filter(p=>S.cat==="all"||p.category===S.cat).map(p=>p.subcategory).filter(Boolean))].sort();
+ return `<details class="box filt"${S.brand||S.sub||S.sort?" open":""}><summary>Filters &amp; my country${S.country?" · "+esc(cname(S.country)):""}</summary>
+ <label for="fc">My country (we show what works for you)</label><select id="fc"><option value="">Not set</option>${CC.map(c=>`<option value="${c}" ${c===S.country?"selected":""}>${esc(cname(c))}</option>`).join("")}</select>
+ <label for="fb">Brand</label><select id="fb"><option value="">All brands</option>${brands.map(b=>`<option ${b===S.brand?"selected":""}>${esc(b)}</option>`).join("")}</select>
+ <label for="ft">Type</label><select id="ft"><option value="">All types</option>${subs.map(b=>`<option ${b===S.sub?"selected":""}>${esc(b)}</option>`).join("")}</select>
+ <label for="fs">Sort by</label><select id="fs">${[["","Recommended"],["best","Best selling"],["low","Price: low to high"],["high","Price: high to low"]].map(o=>`<option value="${o[0]}" ${o[0]===S.sort?"selected":""}>${o[1]}</option>`).join("")}</select></details>`}
+document.addEventListener("change",e=>{const i=e.target.id,v=e.target.value;
+ if(i==="fc"){S.country=v;try{localStorage.setItem("av_country",v)}catch(x){}}else if(i==="fb")S.brand=v;else if(i==="ft")S.sub=v;else if(i==="fs")S.sort=v;else return;
+ if($("pgrid"))$("pgrid").innerHTML=shopGrid()});
 async function shop(t){
  const cats=[{id:"all",label:"All"}].concat(C.CATEGORIES);
- const html=()=>`<div class="box hero">${astroPose("hello",84)}<div><b>${esc(C.BRAND)}</b><p>Subscriptions and game top-ups at friendlier prices.</p></div></div><div class="steps"><div><i>1</i><b>Add money</b><small>to your wallet</small></div><div><i>2</i><b>Pick a product</b><small>and tap Buy</small></div><div><i>3</i><b>Get it</b><small>instantly or in hours</small></div></div>${S.user||localStorage.getItem("av_seen")?"":`<div class="box" style="margin-bottom:10px"><b>New here?</b> <a href="#" data-a="how">See how it works (30 seconds)</a></div>`}<div class="trust"><span>🔒 Verified payments</span><span>↩️ Refund if we can’t deliver</span><span>💬 Human support</span></div><input id="sq" class="search" type="search" placeholder="Search products" value="${esc(S.q)}" autocomplete="off"><div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>`;
+ const html=()=>`<div class="box hero">${astroPose("hello",84)}<div><b>${esc(C.BRAND)}</b><p>Subscriptions and game top-ups at friendlier prices.</p>${ST&&ST.completed>0?`<p class="lk">✅ ${ST.completed} orders completed${ST.reviews>0&&ST.positive_pct!=null?" · 👍 "+Math.round(ST.positive_pct)+"% positive":""}</p>`:""}</div></div>
+ <div class="steps"><div><i>1</i><b>Add money</b><small>to your wallet</small></div><div><i>2</i><b>Pick a product</b><small>and tap Buy</small></div><div><i>3</i><b>Get it</b><small>instantly or in hours</small></div></div>${S.user||localStorage.getItem("av_seen")?"":`<div class="box" style="margin-bottom:10px"><b>New here?</b> <a href="#" data-a="how">See how it works (30 seconds)</a></div>`}
+ <div class="trust"><span>🔒 Verified payments</span><span>↩️ Refund if we can’t deliver</span><span>💬 Human support</span></div><input id="sq" class="search" type="search" placeholder="Search products or brands" value="${esc(S.q)}" autocomplete="off">
+ <div id="fbar">${filterBar()}</div><div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>`;
  if(S.catalog.length)paint(t,html());else paint(t,'<div class="box ctr">Loading…</div>');
- try{S.catalog=await rpc("get_catalog");paint(t,html())}catch(e){paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Couldn’t load the shop. ${esc(emsg(e))}</p></div>`)}
+ try{S.catalog=await rpc("get_catalog");try{ST=await rpc("store_stats")}catch(e){ST=null}paint(t,html())}catch(e){paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Couldn’t load the shop. ${esc(emsg(e))}</p></div>`)}
 }
+// OFFER PAGE (bottom sheet): price + discount, ratings, info table, details, chat + buy.
 function openProduct(id,note){
- const p=S.catalog.find(x=>x.id===id);if(!p)return;const inst=p.fulfillment==="instant",out=inst&&!p.stock_left&&!p.coming_soon,bal=S.profile?Number(S.profile.balance):0,need=p.price-bal;
+ const p=S.catalog.find(x=>x.id===id);if(!p)return;const inst=p.fulfillment==="instant",stock=p.stock_left,out=!p.coming_soon&&stock!=null&&stock<=0,bal=S.profile?Number(S.profile.balance):0,need=p.price-bal,rg=region(p),d=(p.discount_percent||0)>0,reg=p.regular_price!=null?p.regular_price:p.price;
  S.buy={id,rid:uuid()};
  let btn;if(!S.user)btn='<button class="btn p" data-a="login">Log in to buy</button>';
+ else if(!rg.ok)btn='<button class="btn" disabled>Not available in your country</button>';
  else if(out)btn='<button class="btn" disabled>Sold out</button>';
  else if(p.coming_soon)btn=`<button class="btn p" data-a="buy1">Buy for ${money(p.price)}</button>`;   // coming-soon: flow runs, then doBuy() explains
- else if(need>0)btn=`<button class="btn p" data-a="topup" data-need="${Math.ceil(need)}">Top up ${money(need)} to buy</button>`;
+ else if(need>0)btn=`<button class="btn p" data-a="topup" data-need="${Math.ceil(need)}">Add ${money(need)} to buy</button>`;
  else btn=`<button class="btn p" data-a="buy1">Buy for ${money(p.price)}</button>`;
- sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button><div class="sh-h"><div class="pi">${esc(p.icon)}</div><div><b class="wt-w">${esc(p.name)}</b><div class="pd">${esc(p.duration_label)} · ${esc(catLabel(p.category))}</div></div></div>
- <div class="pprice mt"><b style="font-size:26px">${money(p.price)}</b>${p.retail_price>p.price?`<s>${money(p.retail_price)}</s>`:""}</div>
- <p>${esc(p.description)}</p><p class="en" style="font-size:14px">${inst?"⚡ Delivered instantly after payment.":"🕒 Processed by hand, "+(C.ETA_MANUAL||"usually within a few hours")+". Shows as Pending in Orders until done."}</p>
+ const row=(k,v,cls)=>v?`<p class="meta"><span>${k}</span><b class="${cls||""}">${v}</b></p>`:"";
+ sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button><div class="sh-h"><div class="pi">${esc(p.icon)}</div><div><b class="wt-w">${esc(p.name)}</b><div class="pd">${esc(p.duration_label)} · ${esc(catLabel(p.category))}${p.offer_no?" · Offer OF-"+p.offer_no:""}</div></div></div>
+ <div class="pprice mt"><b style="font-size:28px">${money(p.price)}</b>${(d||p.retail_price>p.price)?`<s class="red">${money(d?reg:p.retail_price)}</s>`:""}${d?` <span class="pill hot">−${p.discount_percent}%${p.discount_until?" · ends "+new Date(p.discount_until).toLocaleDateString():""}</span>`:""}</div>
+ <div class="pbd" style="margin:6px 0">${p.review_count?`<a href="#" class="pill ok" data-a="reviews" data-id="${p.id}">👍 ${Math.round(p.positive_pct)}% · ${p.review_count} reviews</a>`:'<span class="pill">No reviews yet</span>'}<span class="pill">${p.sold||0} sold</span>${p.trending?'<span class="pill hot">🔥 Trending</span>':""}${p.featured?'<span class="pill">⭐ Featured</span>':""}</div>
+ <div class="box" style="padding:8px 12px">${row("Can be activated in",esc(rg.text),rg.ok?"":"neg")}${row("Delivery",inst?"⚡ Instant":p.delivery_minutes>0?"🕒 "+spd(p.delivery_minutes):"🕒 On request")}${p.avg_delivery_min!=null?row("Average delivery",spd(Math.round(p.avg_delivery_min))+" (recent orders)"):""}${row("Brand",esc(p.brand||""))}${row("Type",esc(p.subcategory||""))}${row("In stock",stock!=null?(stock<=0?"Sold out":stock+" available"):"Available")}${row("Orders completed",String(p.completed||0))}</div>
+ <p>${esc(p.description)}</p>
  ${p.input_label?`<label for="buyin">${esc(p.input_label)}</label><input id="buyin" maxlength="200" autocomplete="off">`:""}
  ${p.terms?`<details class="mt"><summary>Terms &amp; warranty</summary><p class="en" style="font-size:14px">${esc(p.terms)}</p></details>`:""}
  ${S.user?`<p class="meta mt"><span>Your balance</span><span>${money(bal)}${need<=0?" → "+money(bal-p.price):""}</span></p>`:""}
- <p class="lk">🔒 Paid from your wallet · ↩️ Refunded if we can’t deliver · 💬 Chat with us anytime</p><p id="buymsg" class="au-m" role="status" style="color:#dc2626">${esc(note||"")}</p><div id="buyarea">${btn}</div>`);
+ <p class="lk">🔒 Paid from your wallet · ↩️ Refunded if we can’t deliver · 💬 Chat with us anytime</p><p id="buymsg" class="au-m" role="status" style="color:#dc2626">${esc(note||"")}</p>
+ <button class="btn" data-a="pchat" data-id="${p.id}" style="margin-bottom:8px">💬 Chat with us about this offer</button><div id="buyarea">${btn}</div>`);
 }
 async function doBuy(){
  const p=S.catalog.find(x=>x.id===S.buy.id),inp=$("buyin");
@@ -230,18 +267,20 @@ async function orders(t){
  if(error)return paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Couldn’t load orders.</p></div>`);ORD=data;
  paint(t,ORD.length?`<h2>My orders</h2><p class="lk">Pending = received · Processing = we’re working on it · Completed = delivered. Tap an order for details.</p>`+ORD.map(o=>`<button class="item" data-a="order" data-id="${o.id}"><span><b>${esc(o.product_name)}</b><br><small class="lk">#AV-${o.number} · ${when(o.created_at)} · ${money(o.price)}</small></span>${pillS(o.status)}</button>`).join(""):`<div class="box ctr">${astroPose("empty",90)}<h2>No orders yet</h2><p class="en">Your purchases will show up here.</p><button class="btn p" data-go="shop">Browse the shop</button></div>`);
 }
-function openOrder(id){const o=ORD.find(x=>x.id===id);if(!o)return;
+async function openOrder(id){const o=ORD.find(x=>x.id===id);if(!o)return;
  sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button><b class="wt-w">${esc(o.product_name)}</b><p class="lk">Order #AV-${o.number}</p><p>${pillS(o.status)} <span class="lk">${money(o.price)} · ${when(o.created_at)}</span></p>
  ${o.buyer_input?`<p class="en" style="font-size:14px">You sent: ${esc(o.buyer_input)}</p>`:""}
  ${o.delivery?`<div class="cred" id="dl">${esc(o.delivery)}</div><button class="btn" data-a="copyel" data-id="dl">Copy details</button>`:""}
  ${o.status==="pending"||o.status==="processing"?`<p class="en">We’re working on it and you’ll get a notification when it’s ready.</p>`:""}
  ${o.status==="cancelled"?`<p class="en">Cancelled. Any payment was refunded to your wallet.${o.admin_note?" Note: "+esc(o.admin_note):""}</p>`:o.admin_note?`<p class="en">Note: ${esc(o.admin_note)}</p>`:""}
- <div style="height:10px"></div><button class="btn" data-a="help" data-id="${o.id}">Need help with this order?</button>`)}
+ <div id="rvbox"></div><div style="height:10px"></div><button class="btn" data-a="help" data-id="${o.id}">Need help with this order?</button>`);
+ if(o.status==="completed"){const{data:rv}=await sb.from("reviews").select("positive,comment").eq("order_id",o.id).maybeSingle();const bx=$("rvbox");if(!bx)return;
+  bx.innerHTML=rv?`<p class="en">Your review: ${rv.positive?"👍":"👎"} ${esc(rv.comment||"")}</p>`:`<p class="en"><b>How was it?</b></p><div class="row"><button class="btn" data-a="rvpick" data-v="1">👍 Good</button><button class="btn" data-a="rvpick" data-v="0">👎 Not good</button></div><textarea id="rvc" rows="2" maxlength="500" placeholder="Optional comment"></textarea><button class="btn p" id="rvgo" data-a="rvsend" data-id="${o.id}" disabled>Send review</button>`}}
 
 // ---------- account ----------
 function account(t){
  if(!S.user)return paint(t,login());const p=S.profile||{};
- paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>${esc(p.username)}</b><div class="lk">${esc(p.email)}</div></div></div>
+ paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>${esc(p.username)}</b><div class="lk">${esc(p.email)}${p.user_no?" · ID #"+p.user_no:""}</div></div></div>
  <div class="acc3"><button data-go="wallet"><b>${money(p.balance)}</b><small>Wallet · add money</small></button><button data-go="orders"><b>📦</b><small>My orders</small></button><button data-go="support"><b>💬</b><small>Get help</small></button></div></div>
  <h3>Settings</h3><div class="box"><label for="th">Appearance</label><select id="th"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
  <label class="chk"><input type="checkbox" id="nt" ${p.notify_email!==false?"checked":""}> <span>Email me order and support updates</span></label></div>
@@ -293,6 +332,13 @@ document.addEventListener("submit",async e=>{
 
 // ---------- plug-in API for support.js and staff.js ----------
 window.AV={C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rpc,emsg,paint,route,V,rank,can,ROLEP,loadProfile,chrome,uuid,pillS,login,act:{},form:{}};
+// ---------- reviews & product chat (customer actions) ----------
+let RV=null;
+AV.act.rvpick=el=>{RV=el.dataset.v;document.querySelectorAll("[data-a=rvpick]").forEach(b=>b.classList.toggle("p",b===el));$("rvgo").disabled=false};
+AV.act.rvsend=async el=>{try{await rpc("leave_review",{p_order:el.dataset.id,p_positive:RV==="1",p_comment:($("rvc")||{}).value||null});pop("Thanks for your review!");S.catalog=[];openOrder(el.dataset.id)}catch(e){pop(emsg(e))}};
+AV.act.reviews=async el=>{const p=S.catalog.find(x=>x.id===el.dataset.id);if(!p)return;let r=[];try{r=await rpc("get_reviews",{p_product:p.id,p_limit:30})||[]}catch(e){}
+ sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button><h2>Reviews</h2><p class="lk">${esc(p.name)} · ${p.review_count?Math.round(p.positive_pct)+"% positive ("+p.review_count+")":"No reviews yet"}. Only verified buyers can review.</p>${r.map(x=>`<div class="tx"><span>${x.positive?"👍":"👎"} ${esc(x.who)}<small>${esc(x.comment||"(no comment)")} · ${when(x.created_at)}</small></span></div>`).join("")||'<p class="en">No reviews yet.</p>'}<div style="height:10px"></div><button class="btn" data-a="product" data-id="${p.id}">← Back to offer</button>`)};
+AV.act.pchat=el=>{const p=S.catalog.find(x=>x.id===el.dataset.id);if(!p)return;if(!S.user){closeSheet();return authUI("login")}AV.newTicket("product",null,"Question about "+p.name+(p.offer_no?" (Offer OF-"+p.offer_no+")":""))};
 
 // ---------- boot ----------
 // Start only after ALL scripts (support.js, staff.js, legal.js) have registered their screens; otherwise a page reload on #/staff or #/support

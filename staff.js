@@ -24,7 +24,7 @@ V.staff=async t=>{
  if(A.can("orders"))n.orders=await cnt(sb.from("orders").select("id",{count:"exact",head:true}).in("status",["pending","processing"]));
  if(A.can("topups"))n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"));
  const todo=[n.topups&&n.topups+" payment(s) to verify",n.orders&&n.orders+" order(s) to fulfil",n.queue&&n.queue+" ticket(s) waiting"].filter(Boolean);
- paint(t,`<h2>Staff</h2><form data-f="usearch" class="sfind"><input id="uq" placeholder="🔎 Find a customer: username or email" required autocomplete="off"><button class="btn p">Find</button></form><div id="ures"></div>
+ paint(t,`<h2>Staff</h2><form data-f="usearch" class="sfind"><input id="uq" placeholder="🔎 Find a customer: username, email or ID" required autocomplete="off"><button class="btn p">Find</button></form><div id="ures"></div>
   <p class="en">${todo.length?"Needs you now: "+todo.join(" · "):"✅ Nothing is waiting for you."}</p>
   <div class="tiles">${tabs.map(x=>`<button class="tile2" data-a="stab" data-id="${x[0]}">${n[x[0]]?`<i class="bdg">${n[x[0]]}</i>`:""}<span class="ti">${x[3]}</span><b>${x[1]}</b><small>${x[4]}</small></button>`).join("")}</div>`);
 };
@@ -104,33 +104,48 @@ act.treject=el=>{const n=prompt("Reason shown to the customer (optional)");if(n!
 let PRODS=[];
 TAB.products=async()=>{
  const{data,error}=await sb.from("products").select("*").order("sort_order");if(error)throw error;PRODS=data;
- return `<button class="btn p" data-a="newprod">+ New product</button>`+data.map(p=>`<div class="box mt"><b>${esc(p.icon)} ${esc(p.name)}</b> <span class="pill">${p.fulfillment}</span> ${p.coming_soon?'<span class="pill wait">coming soon</span>':'<span class="pill ok">live</span>'} ${p.is_active?"":'<span class="pill no">hidden</span>'}
-  <div class="lk">${money(p.price)} (retail ${money(p.retail_price)})</div><div class="row mt">
-  <button class="btn" data-a="plive" data-id="${p.id}" data-v="${p.coming_soon?1:0}">${p.coming_soon?"Go live":"Set coming soon"}</button>
-  <button class="btn" data-a="pedit" data-id="${p.id}">Edit</button><button class="btn" data-a="pprice" data-id="${p.id}">Price</button>
-  <button class="btn" data-a="pvis" data-id="${p.id}" data-v="${p.is_active?1:0}">${p.is_active?"Hide":"Show"}</button>
-  ${p.fulfillment==="instant"?`<button class="btn" data-a="pstock" data-id="${p.id}">Stock</button>`:""}<button class="btn" data-a="pdel" data-id="${p.id}">Delete</button></div></div>`).join("");
+ return `<button class="btn p" data-a="newprod">+ New product</button>`+data.map(p=>`<div class="box mt"><b>${esc(p.icon)} ${esc(p.name)}</b> <span class="lk">OF-${p.offer_no||"?"}</span><br><span class="pill">${p.fulfillment}</span> ${p.coming_soon?'<span class="pill wait">coming soon</span>':'<span class="pill ok">live</span>'} ${p.is_active?"":'<span class="pill no">hidden</span>'} ${p.discount_percent>0?`<span class="pill hot">−${p.discount_percent}%</span>`:""}${p.featured?' <span class="pill">⭐</span>':""}
+  <div class="lk">${money(p.price)}${p.retail_price?" (retail "+money(p.retail_price)+")":""} · ${p.fulfillment==="manual"?(p.stock_qty==null?"unlimited stock":p.stock_qty+" in stock"):"stock = items list"} · past sales ${p.sold_offset||0}</div>
+  <div class="row mt"><button class="btn" data-a="plive" data-id="${p.id}" data-v="${p.coming_soon?1:0}">${p.coming_soon?"Go live":"Set coming soon"}</button><button class="btn" data-a="pedit" data-id="${p.id}">Edit</button><button class="btn" data-a="pdisc" data-id="${p.id}">🏷️ Discount</button>
+  <button class="btn" data-a="pvis" data-id="${p.id}" data-v="${p.is_active?1:0}">${p.is_active?"Hide":"Show"}</button>${p.fulfillment==="instant"?`<button class="btn" data-a="pstock" data-id="${p.id}">Stock</button>`:`<button class="btn" data-a="pqty" data-id="${p.id}">Restock</button>`}<button class="btn" data-a="pdel" data-id="${p.id}">Delete</button></div></div>`).join("");
 };
 const upd=async(id,patch)=>{const{error}=await sb.from("products").update(patch).eq("id",id);pop(error?"Failed: "+error.message:"Saved");A.route()};
 act.plive=el=>upd(el.dataset.id,{coming_soon:el.dataset.v!=="1"});
 act.pvis=el=>upd(el.dataset.id,{is_active:el.dataset.v!=="1"});
 act.pprice=el=>{const v=parseFloat(prompt("New price (USD)"));if(v>=0)upd(el.dataset.id,{price:v})};
 // One form for BOTH new and edit (data-id empty = new). Slug is generated once and never changes on edit.
-const pform=p=>{p=p||{icon:"📦",category:A.C.CATEGORIES[0].id,fulfillment:"instant",coming_soon:true};
+const pform=p=>{p=p||{icon:"📦",category:A.C.CATEGORIES[0].id,fulfillment:"instant",coming_soon:true,region_mode:"global",region_list:[],delivery_minutes:0};
  const cats=A.C.CATEGORIES.concat(A.C.CATEGORIES.find(c=>c.id===p.category)?[]:[{id:p.category,label:p.category}]);
- sheet(`${X}<h2>${p.id?"Edit":"New"} product</h2><form data-f="prod" data-id="${p.id||""}"><label>Name</label><input id="pn" required maxlength="120" value="${esc(p.name||"")}">
- <label>Icon (emoji)</label><input id="pi" value="${esc(p.icon||"📦")}" maxlength="4"><label>Category</label><select id="pc">${cats.map(c=>`<option value="${esc(c.id)}" ${c.id===p.category?"selected":""}>${esc(c.label)}</option>`).join("")}</select>
- <label>Duration (e.g. 1 month)</label><input id="pdur" value="${esc(p.duration_label||"")}"><label>Description</label><textarea id="pds" rows="2">${esc(p.description||"")}</textarea>
- <label>Price (USD)</label><input id="ppr" type="number" step="0.01" min="0" required value="${p.price==null?"":p.price}"><label>Retail price (shown crossed out)</label><input id="prp" type="number" step="0.01" min="0" value="${p.retail_price==null?"":p.retail_price}">
- <label>Delivery</label><select id="pf"><option value="instant" ${p.fulfillment==="instant"?"selected":""}>Instant (from stock)</option><option value="manual" ${p.fulfillment==="manual"?"selected":""}>Manual (you fulfil)</option></select>
- <label>Ask buyer for (blank = nothing)</label><input id="pil" placeholder="Your Spotify email" value="${esc(p.input_label||"")}"><label>Terms / warranty</label><textarea id="ptm" rows="2">${esc(p.terms||"")}</textarea>
- <label>Sort order (small = first)</label><input id="pso" type="number" value="${p.sort_order==null?100:p.sort_order}">
- <label><input type="checkbox" id="pcs" ${p.coming_soon?"checked":""}> Coming soon (not purchasable yet)</label><label><input type="checkbox" id="pac" ${p.is_active===false?"":"checked"}> Visible in shop</label>
+ const left=p.discount_until?Math.max(1,Math.ceil((new Date(p.discount_until)-Date.now())/864e5)):"",v=x=>esc(x==null?"":x);
+ sheet(`${X}<h2>${p.id?"Edit":"New"} product${p.offer_no?" · OF-"+p.offer_no:""}</h2><form data-f="prod" data-id="${p.id||""}"><label>Name</label><input id="pn" required maxlength="120" value="${v(p.name)}">
+ <label>Icon (emoji)</label><input id="pi" value="${v(p.icon||"📦")}" maxlength="4"><label>Category</label><select id="pc">${cats.map(c=>`<option value="${esc(c.id)}" ${c.id===p.category?"selected":""}>${esc(c.label)}</option>`).join("")}</select>
+ <label>Brand (e.g. Google, Netflix, CapCut)</label><input id="pbr" value="${v(p.brand)}"><label>Price (USD)</label><input id="ppr" type="number" step="0.01" min="0" required value="${v(p.price)}">
+ <label>Retail price (crossed out, optional)</label><input id="prp" type="number" step="0.01" min="0" value="${v(p.retail_price)}">
+ <label>Delivery</label><select id="pf"><option value="instant" ${p.fulfillment==="instant"?"selected":""}>Instant (from stock list)</option><option value="manual" ${p.fulfillment==="manual"?"selected":""}>Manual (you deliver)</option></select>
+ <label>Delivery time in minutes (0 = instant, 60 = 1 hour)</label><input id="pdm" type="number" min="0" value="${v(p.delivery_minutes||0)}">
+ <label>Stock quantity (manual items; blank = unlimited. Counts down automatically)</label><input id="psq" type="number" min="0" value="${v(p.stock_qty)}">
+ <label>Description</label><textarea id="pds" rows="2">${v(p.description)}</textarea>
+ <details class="mt"><summary>More options</summary><label>Type (e.g. Premium, Gift card, Top-up)</label><input id="psc" value="${v(p.subcategory)}"><label>Duration (e.g. 1 month)</label><input id="pdur" value="${v(p.duration_label)}">
+ <label>Discount %</label><input id="pdp" type="number" min="0" max="90" value="${v(p.discount_percent||0)}"><label>Discount lasts how many days? (blank = until removed)</label><input id="pdd" type="number" min="1" value="${left}">
+ <label>Where can it be activated?</label><select id="prm"><option value="global" ${p.region_mode==="global"?"selected":""}>Worldwide</option><option value="only" ${p.region_mode==="only"?"selected":""}>Only these countries</option><option value="except" ${p.region_mode==="except"?"selected":""}>Everywhere EXCEPT these</option></select>
+ <label>Country codes (e.g. TN, DZ, MA)</label><input id="prl" value="${v((p.region_list||[]).join(", "))}">
+ <label>Ask buyer for (blank = nothing)</label><input id="pil" placeholder="Your Spotify email" value="${v(p.input_label)}"><label>Terms / warranty</label><textarea id="ptm" rows="2">${v(p.terms)}</textarea>
+ <label>Past sales: real sales you made before / outside this site</label><input id="pso2" type="number" min="0" value="${v(p.sold_offset||0)}"><label>Sort order (small = first)</label><input id="pso" type="number" value="${v(p.sort_order==null?100:p.sort_order)}">
+ <label class="chk"><input type="checkbox" id="pft" ${p.featured?"checked":""}> <span>⭐ Featured</span></label><label class="chk"><input type="checkbox" id="pcs" ${p.coming_soon?"checked":""}> <span>Coming soon (not purchasable yet)</span></label><label class="chk"><input type="checkbox" id="pac" ${p.is_active===false?"":"checked"}> <span>Visible in shop</span></label></details>
  <div style="height:12px"></div><button class="btn p">${p.id?"Save changes":"Create"}</button></form><p id="pmsg" class="au-m" style="color:#dc2626"></p>`)};
+act.pdisc=el=>{const p=PRODS.find(x=>x.id===el.dataset.id);sheet(`${X}<h2>Discount: ${esc(p.name)}</h2><p class="en" style="font-size:14px">Regular price ${money(p.price)}. Customers see it crossed out in red next to the new price.</p><form data-f="pdisc" data-id="${p.id}"><label>Discount %</label><div>${[5,10,20,30].map(a=>`<button type="button" class="chip" data-a="dpct" data-v="${a}">${a}%</button>`).join("")}</div><input id="dp" type="number" min="1" max="90" value="${p.discount_percent||10}"><label>For how many days? (blank = until you remove it)</label><input id="dd" type="number" min="1" placeholder="e.g. 3"><div style="height:10px"></div><button class="btn p">Apply discount</button><div style="height:8px"></div><button type="button" class="btn" data-a="drem" data-id="${p.id}">Remove discount</button></form>`)};
+act.dpct=el=>{$("dp").value=el.dataset.v};
+form.pdisc=async f=>{const d=parseInt($("dd").value);await upd(f.dataset.id,{discount_percent:Math.min(90,Math.max(1,parseInt($("dp").value)||1)),discount_until:d>0?new Date(Date.now()+d*864e5).toISOString():null});closeSheet()};
+act.drem=async el=>{await upd(el.dataset.id,{discount_percent:0,discount_until:null});closeSheet()};
+act.pqty=el=>{const p=PRODS.find(x=>x.id===el.dataset.id),v=prompt("Stock quantity for "+p.name+" (blank = unlimited)",p.stock_qty==null?"":p.stock_qty);if(v===null)return;upd(p.id,{stock_qty:v.trim()===""?null:Math.max(0,parseInt(v)||0)})};
 act.newprod=()=>pform();
 act.pedit=el=>pform(PRODS.find(p=>p.id===el.dataset.id));
-form.prod=async f=>{const v=id=>$(id).value.trim(),id=f.dataset.id;
- const row={name:v("pn"),icon:v("pi")||"📦",category:$("pc").value,duration_label:v("pdur"),description:v("pds"),price:parseFloat($("ppr").value),retail_price:$("prp").value?parseFloat($("prp").value):null,fulfillment:$("pf").value,input_label:v("pil")||null,terms:v("ptm"),sort_order:parseInt($("pso").value)||100,coming_soon:$("pcs").checked,is_active:$("pac").checked};
+form.prod=async f=>{const v=id=>$(id).value.trim(),id=f.dataset.id,num=(i,d)=>{const x=parseInt($(i).value);return isNaN(x)?d:x},days=num("pdd",0);
+ const row={name:v("pn"),icon:v("pi")||"📦",category:$("pc").value,brand:v("pbr")||null,subcategory:v("psc")||null,duration_label:v("pdur"),description:v("pds"),price:parseFloat($("ppr").value),retail_price:$("prp").value?parseFloat($("prp").value):null,fulfillment:$("pf").value,
+  delivery_minutes:Math.max(0,num("pdm",0)),stock_qty:($("pf").value==="manual"&&$("psq").value!=="")?Math.max(0,num("psq",0)):null,input_label:v("pil")||null,terms:v("ptm"),sort_order:num("pso",100),sold_offset:Math.max(0,num("pso2",0)),
+  discount_percent:Math.min(90,Math.max(0,num("pdp",0))),discount_until:days>0?new Date(Date.now()+days*864e5).toISOString():null,featured:$("pft").checked,coming_soon:$("pcs").checked,is_active:$("pac").checked,
+  region_mode:$("prm").value,region_list:$("prm").value==="global"?[]:$("prl").value.toUpperCase().split(/[^A-Z]+/).filter(c=>c.length===2)};
+ if(row.region_mode!=="global"&&!row.region_list.length)return $("pmsg").textContent="Add at least one country code, or choose Worldwide.";
  if(!id)row.slug=(row.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"item")+"-"+Math.random().toString(36).slice(2,6);
  const{error}=id?await sb.from("products").update(row).eq("id",id):await sb.from("products").insert(row);
  if(error)$("pmsg").textContent=error.message;else{closeSheet();pop(id?"Saved":"Created");A.route()}};
@@ -151,9 +166,9 @@ let UR=[],TEAM=[],PMS=[];
 const PL={tickets:"Read & answer all tickets",assign_tickets:"Assign tickets to others",orders:"Process / cancel orders",place_orders:"Place orders for customers",topups:"Verify payments (top-ups)",products:"Add / edit / delete products & stock",users_view:"See customers",wallet:"Add / remove wallet money",coins:"Grant AstroCoins & set rates",payments:"Edit payment methods",staff_manage:"Manage roles & permissions",audit:"See the audit log"};
 TAB.users=async()=>`<form data-f="usearch"><label for="uq">Search username or email</label><input id="uq" required><div style="height:10px"></div><button class="btn p">Search</button></form><div id="ures"></div>`;
 // Search result = compact row. Tapping opens the CUSTOMER CARD: balance, recent orders/ledger/tickets, and a ready-made "add money" form.
-const ucard=u=>`<button class="item" data-a="ucard" data-id="${u.id}"><span><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><br><small class="lk">${esc(u.email)} · ${money(u.balance)}</small></span><span>›</span></button>`;
+const ucard=u=>`<button class="item" data-a="ucard" data-id="${u.id}"><span><b>@${esc(u.username)}</b> <span class="pill">${esc(u.role)}</span><br><small class="lk">#${u.user_no||"?"} · ${esc(u.email)} · ${money(u.balance)}</small></span><span>›</span></button>`;
 act.ucard=async el=>{const id=el.dataset.id;
- const[p,o,w,k]=await Promise.all([sb.from("profiles").select("id,username,email,balance,role,coins,created_at,perm_grants,perm_revokes").eq("id",id).maybeSingle(),
+ const[p,o,w,k]=await Promise.all([sb.from("profiles").select("id,username,email,balance,role,coins,created_at,perm_grants,perm_revokes,user_no").eq("id",id).maybeSingle(),
   sb.from("orders").select("number,product_name,price,status,created_at").eq("user_id",id).order("created_at",{ascending:false}).limit(5),
   sb.from("wallet_transactions").select("amount,note,created_at").eq("user_id",id).order("created_at",{ascending:false}).limit(5),
   sb.from("tickets").select("id,number,subject,status").eq("user_id",id).order("last_message_at",{ascending:false}).limit(3)]);
@@ -163,7 +178,7 @@ act.ucard=async el=>{const id=el.dataset.id;
  if(A.can("coins"))b.push(`<button class="btn" data-a="ucoin" data-id="${u.id}">🪙 Coins</button>`);
  if(A.can("staff_manage")&&lower)b.push(`<button class="btn" data-a="urole" data-id="${u.id}">Role</button>`);
  if(A.can("staff_manage")&&lower&&RK[u.role]>=1)b.push(`<button class="btn" data-a="uperms" data-id="${u.id}">Permissions</button>`);
- sheet(`${X}<h2>@${esc(u.username)} <span class="pill">${esc(u.role)}</span></h2><p class="lk">${esc(u.email)} · joined ${when(u.created_at)}</p>
+ sheet(`${X}<h2>@${esc(u.username)} <span class="pill">${esc(u.role)}</span></h2><p class="lk">ID #${u.user_no||"?"} · ${esc(u.email)} · joined ${when(u.created_at)}</p>
  <div class="box wal" style="padding:12px"><span class="en">Wallet balance</span><b style="font-size:30px">${money(u.balance)}</b><span class="lk">🪙 ${u.coins||0} AstroCoins</span></div>
  ${A.can("wallet")?`<form data-f="cadj" data-id="${u.id}"><label>Add money (use − to remove)</label><div>${[5,10,25,50].map(a=>`<button type="button" class="chip" data-a="qamt" data-v="${a}">+${a}</button>`).join("")}</div><input id="ca" type="number" step="0.01" required placeholder="Amount in USD"><label for="cn2">Reason (the customer sees this)</label><select id="cn2"><option>Top-up (payment received)</option><option>Refund</option><option>Goodwill credit</option><option>Correction</option></select><div style="height:10px"></div><button class="btn p">Apply to wallet</button></form>`:""}
  <div class="row mt">${b.join("")}</div>
@@ -174,7 +189,7 @@ act.qamt=el=>{$("ca").value=el.dataset.v};
 form.cadj=async f=>{const a=parseFloat($("ca").value);if(!a)return;if(!confirm((a>0?"Add ":"Remove ")+money(Math.abs(a))+" to this wallet?"))return;
  try{await rpc("admin_adjust_balance",{p_user_id:f.dataset.id,p_amount:a,p_note:$("cn2").value});pop("Wallet updated");act.ucard({dataset:{id:f.dataset.id}})}catch(e){pop(emsg(e))}};
 form.usearch=async()=>{const q=$("uq").value.replace(/[^\w@.+\- ]/g,"").trim();
- const{data,error}=await sb.from("profiles").select("id,username,email,balance,role,coins,perm_grants,perm_revokes").or(`username.ilike.%${q}%,email.ilike.%${q}%`).limit(10);UR=data||[];
+ const{data,error}=await sb.from("profiles").select("id,username,email,balance,role,coins,perm_grants,perm_revokes,user_no").or(`username.ilike.%${q}%,email.ilike.%${q}%${/^\d{4,}$/.test(q)?`,user_no.eq.${q}`:""}`).limit(10);UR=data||[];
  $("ures").innerHTML=error?"<p class=neg>Error</p>":UR.map(ucard).join("")||"<p class=en>No match.</p>"};
 const U=id=>UR.find(u=>u.id===id)||TEAM.find(u=>u.id===id);
 act.uadj=el=>{const u=U(el.dataset.id);sheet(`${X}<h2>Wallet: @${esc(u.username)}</h2><p>Balance now ${money(u.balance)}. Use a minus sign to remove money.</p><form data-f="uadj" data-id="${u.id}"><label for="am">Amount (USD)</label><input id="am" type="number" step="0.01" required><label for="an">Note (shown to the customer)</label><input id="an" maxlength="200" value="Top-up"><div style="height:12px"></div><button class="btn p">Apply</button></form>`)};
