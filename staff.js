@@ -114,10 +114,14 @@ act.plive=el=>upd(el.dataset.id,{coming_soon:el.dataset.v!=="1"});
 act.pvis=el=>upd(el.dataset.id,{is_active:el.dataset.v!=="1"});
 act.pprice=el=>{const v=parseFloat(prompt("New price (USD)"));if(v>=0)upd(el.dataset.id,{price:v})};
 // One form for BOTH new and edit (data-id empty = new). Slug is generated once and never changes on edit.
+// Pictures: shrink the phone photo to max 900px JPEG in the browser (fast + cheap), upload to the public product-images bucket, store its link.
+async function resizeImg(file,max){const bmp=await createImageBitmap(file),sc=Math.min(1,(max||900)/Math.max(bmp.width,bmp.height)),c=document.createElement("canvas");c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,"image/jpeg",0.85))}
+async function uploadImg(file){const blob=await resizeImg(file),path=A.uuid()+".jpg",up=await sb.storage.from("product-images").upload(path,blob,{contentType:"image/jpeg"});if(up.error)throw up.error;return sb.storage.from("product-images").getPublicUrl(path).data.publicUrl}
 const pform=p=>{p=p||{icon:"📦",category:A.C.CATEGORIES[0].id,fulfillment:"instant",coming_soon:true,region_mode:"global",region_list:[],delivery_minutes:0};
  const cats=A.C.CATEGORIES.concat(A.C.CATEGORIES.find(c=>c.id===p.category)?[]:[{id:p.category,label:p.category}]);
  const left=p.discount_until?Math.max(1,Math.ceil((new Date(p.discount_until)-Date.now())/864e5)):"",v=x=>esc(x==null?"":x);
  sheet(`${X}<h2>${p.id?"Edit":"New"} product${p.offer_no?" · OF-"+p.offer_no:""}</h2><form data-f="prod" data-id="${p.id||""}"><label>Name</label><input id="pn" required maxlength="120" value="${v(p.name)}">
+ <label>Picture (square or wide, any photo)</label>${p.image_url?`<img src="${esc(p.image_url)}" alt="" style="max-width:100%;max-height:120px;border-radius:10px;display:block;margin-bottom:6px"><label class="chk"><input type="checkbox" id="prmimg"> <span>Remove current picture</span></label>`:""}<input id="pimgf" type="file" accept="image/jpeg,image/png,image/webp">
  <label>Icon (emoji)</label><input id="pi" value="${v(p.icon||"📦")}" maxlength="4"><label>Category</label><select id="pc">${cats.map(c=>`<option value="${esc(c.id)}" ${c.id===p.category?"selected":""}>${esc(c.label)}</option>`).join("")}</select>
  <label>Brand (e.g. Google, Netflix, CapCut)</label><input id="pbr" value="${v(p.brand)}"><label>Price (USD)</label><input id="ppr" type="number" step="0.01" min="0" required value="${v(p.price)}">
  <label>Retail price (crossed out, optional)</label><input id="prp" type="number" step="0.01" min="0" value="${v(p.retail_price)}">
@@ -145,6 +149,8 @@ form.prod=async f=>{const v=id=>$(id).value.trim(),id=f.dataset.id,num=(i,d)=>{c
   delivery_minutes:Math.max(0,num("pdm",0)),stock_qty:($("pf").value==="manual"&&$("psq").value!=="")?Math.max(0,num("psq",0)):null,input_label:v("pil")||null,terms:v("ptm"),sort_order:num("pso",100),sold_offset:Math.max(0,num("pso2",0)),
   discount_percent:Math.min(90,Math.max(0,num("pdp",0))),discount_until:days>0?new Date(Date.now()+days*864e5).toISOString():null,featured:$("pft").checked,coming_soon:$("pcs").checked,is_active:$("pac").checked,
   region_mode:$("prm").value,region_list:$("prm").value==="global"?[]:$("prl").value.toUpperCase().split(/[^A-Z]+/).filter(c=>c.length===2)};
+ const pf=$("pimgf").files[0];
+ if(pf){$("pmsg").style.color="var(--mut)";$("pmsg").textContent="Uploading picture…";try{row.image_url=await uploadImg(pf)}catch(e){$("pmsg").style.color="#dc2626";return $("pmsg").textContent="Picture upload failed: "+(e.message||e)}}else if($("prmimg")&&$("prmimg").checked)row.image_url=null;
  if(row.region_mode!=="global"&&!row.region_list.length)return $("pmsg").textContent="Add at least one country code, or choose Worldwide.";
  if(!id)row.slug=(row.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"item")+"-"+Math.random().toString(36).slice(2,6);
  const{error}=id?await sb.from("products").update(row).eq("id",id):await sb.from("products").insert(row);

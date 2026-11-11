@@ -148,3 +148,7 @@ details summary{cursor:pointer;font-weight:600;margin:8px 0}
 /* ---- v7: offers ---- */
 .pprice s.red{color:#dc2626;text-decoration-color:#dc2626;margin-left:6px;font-size:14px}.pill.hot{background:#dc2626;color:#fff;border-color:#dc2626}
 .filt{margin:0 0 10px}.filt summary{cursor:pointer;font-weight:600}a.pill{text-decoration:none}
+
+/* ---- v8: product pictures ---- */
+.pimg{aspect-ratio:16/10;border-radius:10px;overflow:hidden;background:var(--soft);display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.pimg img{width:100%;height:100%;object-fit:cover;display:block}.pimg.ph span{font-size:38px}.pimg.wide{aspect-ratio:16/9;border-radius:12px;margin:34px 0 10px}
