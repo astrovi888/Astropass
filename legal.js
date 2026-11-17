@@ -7,7 +7,7 @@ const A=window.AV;if(!A)return;
 const B=A.esc(A.C.BRAND),CT=A.esc(A.C.CONTACT.label),UPDATED="November 2026";
 const P={
  how:["How it works",`<ol class="how"><li><b>Create a free account.</b><br>Takes a minute. Confirm your email with a code.</li>
-  <li><b>Add money to your wallet.</b><br>Tap your balance at the top, choose how to pay (crypto, Binance Pay, RedotPay), and follow the steps. Some payments are credited automatically; others are checked by our team within hours. $1 = 1.00 in your wallet.</li>
+  <li><b>Add money to your wallet.</b><br>Tap your balance at the top, choose how to pay (crypto, Binance Pay, RedotPay, D17), and follow the steps. Some payments are credited automatically; others are checked by our team within hours. $1 = 1.00 in your wallet.</li>
   <li><b>Pick a product and tap Buy.</b><br>You always see the price and your balance before and after. Nothing is charged until you confirm.</li>
   <li><b>Get it.</b><br>Instant items appear in Orders right away. Others are prepared by our team and you get a notification when they’re ready.</li>
   <li><b>Need anything?</b><br>Open the Help tab and chat with a real person. If we can’t deliver, you’re refunded to your wallet.</li></ol>
@@ -18,6 +18,7 @@ const P={
  terms:["Terms of use",`<ul class="info-l">
   <li><b>Wallet.</b> Your wallet is a prepaid balance for buying in this store ($1 = 1.00). It is not a bank account and earns no interest.</li>
   <li><b>Top-ups.</b> We credit your wallet only after we verify your payment by hand. You must give the true sender name, the transaction ID and a screenshot. Fake, edited or reused proofs are rejected and may lead to account suspension.</li>
+  <li><b>Strict payment methods (such as D17).</b> To protect everyone from fraud, these need an identity check (full name, a verified phone number and a live selfie), allow one pending payment at a time, and have limits (smaller for new accounts). Accounts showing signs of fraud, duplicate accounts, or payments from stolen or hacked wallets are frozen immediately, and related funds may be withheld or returned to their source.</li>
   <li><b>AstroCoins.</b> Loyalty rewards earned on completed orders. They have no cash value, can only be redeemed into wallet credit at the posted rate, and the rates may change.</li>
   <li><b>Orders.</b> Instant items are delivered as soon as you pay. Other items are processed by hand: Pending, then Processing, then Completed. If we cannot complete an order it is cancelled and refunded to your wallet.</li>
   <li><b>Third-party services.</b> Subscriptions and accounts come from other companies, who may change or end them. Follow each product's instructions and warranty. Do not change shared credentials or share them further.</li>
@@ -32,8 +33,8 @@ const P={
   <li><b>Payment problems:</b> if you paid but were not credited, open a ticket with your transaction ID and we will investigate.</li></ul>
   <p class="en">Questions? Open a ticket or message ${CT}. We reply as fast as we can, usually within a few hours.</p><p class="lk">Last updated ${UPDATED}.</p>`],
  privacy:["Privacy",`<ul class="info-l">
-  <li><b>What we store:</b> your email, username, orders, wallet history, support messages and the payment screenshots you upload.</li>
-  <li><b>Who sees it:</b> payment screenshots are private and visible only to staff who verify payments. Support agents see your username and ticket, not your email or balance.</li>
+  <li><b>What we store:</b> your email, username, orders, wallet history, support messages and the payment screenshots you upload. For strict payment methods (such as D17) we also keep your full name, a verified phone number and a live selfie to prevent fraud; these are private and used only for security.</li>
+  <li><b>Who sees it:</b> payment screenshots are private and visible only to staff who verify payments. Support agents see your username and ticket, not your email or balance. Your name and phone number are visible only to the owner team members responsible for security.</li>
   <li><b>Where:</b> data is kept with our database provider (Supabase). Notification emails are sent through an email provider.</li>
   <li><b>What we don't do:</b> no ads, no selling your data, no tracking cookies.</li>
   <li><b>Your rights:</b> ask us in a ticket to export or delete your account and we will do it.</li></ul><p class="lk">Last updated ${UPDATED}.</p>`],
@@ -45,4 +46,8 @@ const P={
   <details><summary>Why do you need a screenshot?</summary><p class="en">It protects you and us from fake payments, and it is only visible to the staff who verify it.</p></details>
   <details><summary>Is this official?</summary><p class="en">No. We are an independent reseller and not affiliated with the brands we sell.</p></details>`]};
 Object.keys(P).forEach(k=>{A.act[k]=()=>{A.modal(`<h2>${P[k][0]}</h2>`+P[k][1]);if(k==="how")try{localStorage.setItem("av_seen","1")}catch(e){}}});
+// About page: text, photo and contact buttons come from Staff > Store settings (falls back to a neutral default)
+A.act.about=()=>{const s=A.store||{},nm=s.about_name?`<p><b>${A.esc(s.about_name)}</b>${s.business_name?" · "+A.esc(s.business_name):""}</p>`:"",
+ ph=/^https:\/\//.test(s.about_photo||"")?`<img src="${A.esc(s.about_photo)}" alt="" style="width:88px;height:88px;border-radius:50%;object-fit:cover;float:right;margin:0 0 8px 12px">`:"";
+ A.modal(`<h2>About ${B}</h2>${ph}${nm}<p>${s.about_story?A.esc(s.about_story).replace(/\n/g,"<br>"):`${B} sells digital subscriptions and game top-ups at friendlier prices. You add money to a prepaid wallet, pay from it, and receive your item instantly or processed by hand by our team.`}</p>${A.contactsHTML?A.contactsHTML():""}<p class="lk">${B} is an independent reseller. We are not affiliated with, endorsed by or sponsored by Netflix, Spotify, Google, Canva, Roblox, Valve, Krafton, Garena or any other brand shown. All trademarks belong to their owners.</p>`)};
 })();

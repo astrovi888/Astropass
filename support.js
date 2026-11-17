@@ -25,7 +25,7 @@ V.support=async t=>{
  const{data,error}=await sb.from("tickets").select("*").eq("user_id",S.user.id).order("last_message_at",{ascending:false}).limit(50);
  if(error)return paint(t,'<div class="box ctr"><p>Couldn’t load your tickets.</p></div>');
  paint(t,`<div class="box hero">${astroPose("guide",80)}<div><b>How can we help?</b><p>Pick a topic. A real person replies, usually within a few hours.</p></div></div>
- <div class="tiles">${CATS.map(c=>`<button class="tile2" data-a="tkcat" data-c="${c[0]}"><span class="ti">${c[1]}</span><b>${c[2]}</b></button>`).join("")}</div>
+ ${A.contactsHTML?A.contactsHTML():""}<div class="tiles">${CATS.map(c=>`<button class="tile2" data-a="tkcat" data-c="${c[0]}"><span class="ti">${c[1]}</span><b>${c[2]}</b></button>`).join("")}</div>
  <p class="lk" style="text-align:center"><a href="#" data-a="faq">Quick answers (FAQ)</a></p>
  <h3>My tickets</h3>${data.length?data.map(k=>`<button class="item" data-a="openticket" data-id="${k.id}"><span><b>${(CAT[k.category]||CAT.other)[1]} #${k.number} ${esc(k.subject)}</b><br><small class="lk">${k.assigned_name?esc(k.assigned_name)+" · ":""}${when(k.last_message_at)}</small></span>${tpill(k.status)}</button>`).join(""):'<p class="en">No tickets yet.</p>'}`);
 };
@@ -108,6 +108,7 @@ act.bell=async()=>{
 // link formats: ticket:<id> | staff:<tab> | orders | wallet | account
 act.nlink=el=>{const l=el.dataset.l||"";closeSheet();
  if(l.startsWith("ticket:"))return openTicket(l.slice(7));
+ if(l.startsWith("product:"))return A.openProductById&&A.openProductById(l.slice(8));
  if(l.startsWith("staff:")){A.staffTab=l.slice(6);location.hash="#/staff";return}
  if(l)location.hash="#/"+l};
 })();

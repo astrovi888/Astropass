@@ -152,3 +152,10 @@ details summary{cursor:pointer;font-weight:600;margin:8px 0}
 /* ---- v8: product pictures ---- */
 .pimg{aspect-ratio:16/10;border-radius:10px;overflow:hidden;background:var(--soft);display:flex;align-items:center;justify-content:center;margin-bottom:8px}
 .pimg img{width:100%;height:100%;object-fit:cover;display:block}.pimg.ph span{font-size:38px}.pimg.wide{aspect-ratio:16/9;border-radius:12px;margin:34px 0 10px}
+
+/* ---- v9: contacts, strict warnings, RTL ---- */
+a.btn{text-decoration:none;text-align:center;display:block}.row a.btn{flex:1}.box.warn,.warn.box{background:color-mix(in srgb,#d97706 12%,var(--card));border-color:#d97706}
+.lang{margin-top:8px;font-size:13px}.lang select{width:auto;display:inline-block;margin:0 4px;padding:4px 8px}
+html[dir=rtl] body{direction:rtl}html[dir=rtl] .tile2,html[dir=rtl] .tx,html[dir=rtl] .item{text-align:right}
+html[dir=rtl] .x{left:14px;right:auto}html[dir=rtl] .bdg{left:8px;right:auto}html[dir=rtl] .pprice s.red{margin-left:0;margin-right:6px}
+html[dir=rtl] .msg.me{align-self:flex-start}html[dir=rtl] .msg:not(.me):not(.sys){align-self:flex-end}html[dir=rtl] .how{padding-left:0;padding-right:20px}

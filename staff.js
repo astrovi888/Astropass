@@ -23,14 +23,15 @@ V.staff=async t=>{
  if(A.can("tickets"))n.queue=await cnt(sb.from("tickets").select("id",{count:"exact",head:true}).is("assigned_to",null).in("status",["open","pending"]));
  if(A.can("orders"))n.orders=await cnt(sb.from("orders").select("id",{count:"exact",head:true}).in("status",["pending","processing"]));
  if(A.can("topups"))n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"));
- const todo=[n.topups&&n.topups+" payment(s) to verify",n.orders&&n.orders+" order(s) to fulfil",n.queue&&n.queue+" ticket(s) waiting"].filter(Boolean);
+ if(A.extraCounts)await A.extraCounts(n);
+ const todo=[n.topups&&n.topups+" payment(s) to verify",n.orders&&n.orders+" order(s) to fulfil",n.queue&&n.queue+" ticket(s) waiting",n.security&&n.security+" security alert(s)"].filter(Boolean);
  paint(t,`<h2>Staff</h2><form data-f="usearch" class="sfind"><input id="uq" placeholder="🔎 Find a customer: username, email or ID" required autocomplete="off"><button class="btn p">Find</button></form><div id="ures"></div>
   <p class="en">${todo.length?"Needs you now: "+todo.join(" · "):"✅ Nothing is waiting for you."}</p>
   <div class="tiles">${tabs.map(x=>`<button class="tile2" data-a="stab" data-id="${x[0]}">${n[x[0]]?`<i class="bdg">${n[x[0]]}</i>`:""}<span class="ti">${x[3]}</span><b>${x[1]}</b><small>${x[4]}</small></button>`).join("")}</div>`);
 };
 act.stab=el=>{A.staffTab=el.dataset.id==="home"?null:el.dataset.id;A.route()};
 const run=async(fn,args,ok)=>{try{await rpc(fn,args);pop(ok||"Done");closeSheet();A.route()}catch(e){pop(emsg(e))}};
-const TAB={};
+const TAB={};A.TAB=TAB;A.TABS=TABS;   // staff_extra.js adds more tabs through these
 
 // ---------- OVERVIEW (admin+): money snapshot, overdue work, launch checklist ----------
 // Numbers are computed in the browser from the last 30 days: fine for a family-size store; move to SQL views if it grows.
@@ -80,11 +81,16 @@ act.oset=el=>run("admin_set_order",{p_order_id:el.dataset.id,p_status:el.dataset
 act.ocancel=el=>{if(confirm("Cancel this order and refund the buyer?"))run("admin_cancel_order",{p_order_id:el.dataset.id},"Cancelled and refunded")};
 
 // ---------- TOP-UPS (admin+): verify name + transaction ID + screenshot, then credit ----------
+let IDM={};const normN=s=>String(s||"").toLowerCase().replace(/[^a-z\u0600-\u06FF ]/g,"").replace(/\s+/g," ").trim();
+// Identity line on a top-up card (strict methods): name, phone verified?, selfie, and a warning when the payer name differs
+const idLine=r=>{const x=IDM[r.user_id];if(!x)return "";const same=normN(x.full_name)===normN(r.sender_name);
+ return `<p class="meta"><span>🪪 ${esc(x.full_name)}</span><b>${esc(x.phone_display)} ${x.phone_verified?"✅":"❌ unverified"}</b></p>${x.selfie_path?`<button class="btn" data-a="viewselfie" data-p="${esc(x.selfie_path)}">📷 View selfie</button>`:'<p class="neg">No selfie</p>'}${same?"":'<p class="neg">⚠️ Sender name differs from account name</p>'}`};
 TAB.topups=async()=>{
  const{data,error}=await sb.from("topup_requests").select("*,profiles!topup_requests_user_id_fkey(username,email)").order("created_at",{ascending:false}).limit(60);if(error)throw error;
+ IDM={};{const ids=[...new Set(data.map(r=>r.user_id))];if(ids.length&&A.can("security")){const ir=await sb.from("customer_identity").select("user_id,full_name,phone_display,phone_verified,selfie_path").in("user_id",ids);(ir.data||[]).forEach(x=>IDM[x.user_id]=x)}}
  const dup=r=>data.some(x=>x.id!==r.id&&x.reference.toLowerCase()===r.reference.toLowerCase());
  const card=r=>`<div class="box mt"><b>@${esc(r.profiles&&r.profiles.username)}</b> claims ${money(r.amount)} via ${esc(r.method)} ${pillT(r.status)}
-  <div class="lk">${esc(r.profiles&&r.profiles.email)} · ${when(r.created_at)}</div>
+  <div class="lk">${esc(r.profiles&&r.profiles.email)} · ${when(r.created_at)}</div>${r.amount_local?`<p class="meta"><span>Should have sent</span><b>${r.amount_local} ${esc(r.currency)}</b></p>`:""}${idLine(r)}
   <p class="meta"><span>Sender name</span><span>${esc(r.sender_name||"—")}</span></p><p class="meta"><span>Transaction ID</span><span>${esc(r.reference)}</span></p>
   ${dup(r)?'<p class="neg">⚠ This transaction ID appears more than once.</p>':""}
   <button class="btn" data-a="proof" data-p="${esc(r.proof_path||"")}">View screenshot</button> <button class="btn" data-a="ucard" data-id="${r.user_id}">Customer</button>
@@ -116,7 +122,9 @@ act.pprice=el=>{const v=parseFloat(prompt("New price (USD)"));if(v>=0)upd(el.dat
 // One form for BOTH new and edit (data-id empty = new). Slug is generated once and never changes on edit.
 // Pictures: shrink the phone photo to max 900px JPEG in the browser (fast + cheap), upload to the public product-images bucket, store its link.
 async function resizeImg(file,max){const bmp=await createImageBitmap(file),sc=Math.min(1,(max||900)/Math.max(bmp.width,bmp.height)),c=document.createElement("canvas");c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,"image/jpeg",0.85))}
+A.uploadImg=null;
 async function uploadImg(file){const blob=await resizeImg(file),path=A.uuid()+".jpg",up=await sb.storage.from("product-images").upload(path,blob,{contentType:"image/jpeg"});if(up.error)throw up.error;return sb.storage.from("product-images").getPublicUrl(path).data.publicUrl}
+A.uploadImg=uploadImg;
 const pform=p=>{p=p||{icon:"📦",category:A.C.CATEGORIES[0].id,fulfillment:"instant",coming_soon:true,region_mode:"global",region_list:[],delivery_minutes:0};
  const cats=A.C.CATEGORIES.concat(A.C.CATEGORIES.find(c=>c.id===p.category)?[]:[{id:p.category,label:p.category}]);
  const left=p.discount_until?Math.max(1,Math.ceil((new Date(p.discount_until)-Date.now())/864e5)):"",v=x=>esc(x==null?"":x);
@@ -129,7 +137,7 @@ const pform=p=>{p=p||{icon:"📦",category:A.C.CATEGORIES[0].id,fulfillment:"ins
  <label>Delivery time in minutes (0 = instant, 60 = 1 hour)</label><input id="pdm" type="number" min="0" value="${v(p.delivery_minutes||0)}">
  <label>Stock quantity (manual items; blank = unlimited. Counts down automatically)</label><input id="psq" type="number" min="0" value="${v(p.stock_qty)}">
  <label>Description</label><textarea id="pds" rows="2">${v(p.description)}</textarea>
- <details class="mt"><summary>More options</summary><label>Type (e.g. Premium, Gift card, Top-up)</label><input id="psc" value="${v(p.subcategory)}"><label>Duration (e.g. 1 month)</label><input id="pdur" value="${v(p.duration_label)}">
+ <details class="mt"><summary>More options</summary><label>Type (e.g. Premium, Gift card, Top-up)</label><input id="psc" value="${v(p.subcategory)}"><label>Duration (e.g. 1 month)</label><input id="pdur" value="${v(p.duration_label)}"><label>How long it lasts, in days (renewal reminder 3 days before)</label><input id="pdu" type="number" min="1" value="${v(p.duration_days)}"><label>Warranty: days of free replacement (0 = none)</label><input id="pwd" type="number" min="0" value="${v(p.warranty_days||0)}">
  <label>Discount %</label><input id="pdp" type="number" min="0" max="90" value="${v(p.discount_percent||0)}"><label>Discount lasts how many days? (blank = until removed)</label><input id="pdd" type="number" min="1" value="${left}">
  <label>Where can it be activated?</label><select id="prm"><option value="global" ${p.region_mode==="global"?"selected":""}>Worldwide</option><option value="only" ${p.region_mode==="only"?"selected":""}>Only these countries</option><option value="except" ${p.region_mode==="except"?"selected":""}>Everywhere EXCEPT these</option></select>
  <label>Country codes (e.g. TN, DZ, MA)</label><input id="prl" value="${v((p.region_list||[]).join(", "))}">
@@ -145,7 +153,7 @@ act.pqty=el=>{const p=PRODS.find(x=>x.id===el.dataset.id),v=prompt("Stock quanti
 act.newprod=()=>pform();
 act.pedit=el=>pform(PRODS.find(p=>p.id===el.dataset.id));
 form.prod=async f=>{const v=id=>$(id).value.trim(),id=f.dataset.id,num=(i,d)=>{const x=parseInt($(i).value);return isNaN(x)?d:x},days=num("pdd",0);
- const row={name:v("pn"),icon:v("pi")||"📦",category:$("pc").value,brand:v("pbr")||null,subcategory:v("psc")||null,duration_label:v("pdur"),description:v("pds"),price:parseFloat($("ppr").value),retail_price:$("prp").value?parseFloat($("prp").value):null,fulfillment:$("pf").value,
+ const row={name:v("pn"),icon:v("pi")||"📦",category:$("pc").value,brand:v("pbr")||null,subcategory:v("psc")||null,duration_label:v("pdur"),duration_days:$("pdu").value?Math.max(1,num("pdu",30)):null,warranty_days:Math.max(0,num("pwd",0)),description:v("pds"),price:parseFloat($("ppr").value),retail_price:$("prp").value?parseFloat($("prp").value):null,fulfillment:$("pf").value,
   delivery_minutes:Math.max(0,num("pdm",0)),stock_qty:($("pf").value==="manual"&&$("psq").value!=="")?Math.max(0,num("psq",0)):null,input_label:v("pil")||null,terms:v("ptm"),sort_order:num("pso",100),sold_offset:Math.max(0,num("pso2",0)),
   discount_percent:Math.min(90,Math.max(0,num("pdp",0))),discount_until:days>0?new Date(Date.now()+days*864e5).toISOString():null,featured:$("pft").checked,coming_soon:$("pcs").checked,is_active:$("pac").checked,
   region_mode:$("prm").value,region_list:$("prm").value==="global"?[]:$("prl").value.toUpperCase().split(/[^A-Z]+/).filter(c=>c.length===2)};
@@ -254,7 +262,7 @@ function pmForm(m,t){const T=PT[t],meta=(m&&m.meta)||{};m=m||{label:"",details:"
  ${T.qr?`<label>QR image (optional, e.g. assets/my-qr.png)</label><input id="mq" value="${esc(m.image_url||"")}">`:""}
  ${T.auto?`<label class="chk"><input type="checkbox" id="mauto" ${m.auto_verify?"checked":""}> <span>Credit paid invoices automatically (turn on only after the watch-deposits function is deployed)</span></label>`:""}
  <label class="chk"><input type="checkbox" id="mc" ${m.coming_soon?"checked":""}> <span>Coming soon (shown, not usable)</span></label><label class="chk"><input type="checkbox" id="ma" ${m.is_active!==false?"checked":""}> <span>Visible to customers</span></label>
- <details class="mt"><summary>More options</summary><label>Extra instructions for customers (optional)</label><textarea id="mn" rows="3">${esc(m.instructions||"")}</textarea><label>Sort (small = first)</label><input id="ms" type="number" value="${m.sort_order||100}"></details>
+ <details class="mt"><summary>More options</summary><label class="chk"><input type="checkbox" id="mst" ${m.strict?"checked":""}> <span>Strict rules (identity required, one pending payment at a time)</span></label><label>Currency (USD, TND…)</label><input id="mcur" value="${esc(m.currency||"USD")}" maxlength="4"><label>Max USD per payment (blank = none)</label><input id="mmax" type="number" min="1" value="${m.max_per_topup==null?"":m.max_per_topup}"><label>Max USD per 24h (blank = none)</label><input id="mday" type="number" min="1" value="${m.daily_limit==null?"":m.daily_limit}"><label>Extra instructions for customers (optional)</label><textarea id="mn" rows="3">${esc(m.instructions||"")}</textarea><label>Sort (small = first)</label><input id="ms" type="number" value="${m.sort_order||100}"></details>
  <div style="height:12px"></div><button class="btn p">Save</button></form><p id="pmm" class="au-m" style="color:#dc2626"></p>`)}
 form.pmedit=async f=>{const t=f.dataset.t,T=PT[t],meta={};let details="";
  f.querySelectorAll("[data-k]").forEach(i=>{const v=i.value.trim();if(i.dataset.k==="details")details=v;else if(v)meta[i.dataset.k]=v});
@@ -262,6 +270,6 @@ form.pmedit=async f=>{const t=f.dataset.t,T=PT[t],meta={};let details="";
  const label=$("ml").value.trim(),auto=!!($("mauto")&&$("mauto").checked);
  if(auto&&t==="crypto"&&!["TRC20","BEP20"].includes(meta.network))return $("pmm").textContent="Auto-verify needs the network to be TRC20 or BEP20.";
  const id=f.dataset.id||((label.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,24)||"method")+"-"+Math.random().toString(36).slice(2,5));
- const row={id,label,kind:t,details,meta,image_url:T.qr&&$("mq")?($("mq").value.trim()||null):null,auto_verify:auto,instructions:$("mn").value.trim(),sort_order:parseInt($("ms").value)||100,coming_soon:$("mc").checked,is_active:$("ma").checked};
+ const row={id,label,kind:t,details,meta,image_url:T.qr&&$("mq")?($("mq").value.trim()||null):null,auto_verify:auto,instructions:$("mn").value.trim(),sort_order:parseInt($("ms").value)||100,coming_soon:$("mc").checked,is_active:$("ma").checked,strict:$("mst").checked,currency:($("mcur").value.trim().toUpperCase()||"USD"),max_per_topup:$("mmax").value?parseFloat($("mmax").value):null,daily_limit:$("mday").value?parseFloat($("mday").value):null};
  const{error}=await sb.from("payment_methods").upsert(row);if(error)$("pmm").textContent=error.message;else{closeSheet();pop("Saved");A.route()}};
 })();

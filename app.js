@@ -11,14 +11,15 @@ const when=d=>{try{return new Date(d).toLocaleString([],{dateStyle:"medium",time
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():"10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 function pop(t){const p=$("pop");p.textContent=t;p.className="";void p.offsetWidth;p.className="go"}
 async function copy(t){try{await navigator.clipboard.writeText(t);pop("Copied")}catch(e){pop("Copy failed")}}
-const ERR={not_completed:"You can review an order after it is completed.",already_reviewed:"You already reviewed this order.",insufficient_coins:"Not enough AstroCoins.",method_unavailable:"That payment method isn’t available.",invalid_permission:"Unknown permission.",busy_try_again:"Busy, please try again.",invalid_setting:"Invalid setting.",has_history:"This product has orders, so it can’t be deleted. Use Hide instead.",coming_soon:"This product is not live yet.",duplicate_reference:"That transaction ID was already used.",proof_required:"Please attach a screenshot of your payment.",ticket_closed:"This ticket is closed.",already_assigned:"Someone else already picked this up.",too_many_tickets:"You have 5 open tickets. Please wait for replies.",invalid_message:"Please write a subject and a message.",not_assigned:"This ticket belongs to another agent.",invalid_status:"Invalid status.",invalid_role:"Invalid role.",not_found:"Not found.",not_authenticated:"Please log in first.",insufficient_funds:"Your balance is too low. Top up first.",out_of_stock:"Sorry, this just sold out.",product_unavailable:"This product is no longer available.",input_required:"Please fill in the required detail.",price_changed:"The price just changed. Please review it.",too_many_pending:"You already have 3 pending top-ups. Wait for approval.",invalid_amount:"Invalid amount.",invalid_reference:"Please enter the payment reference.",forbidden:"Not allowed.",already_decided:"Already handled.",not_pending:"Order is not pending.",order_cancelled:"Order was cancelled."};
+const ERR={phone_unverified:"Please verify your phone number first.",selfie_required:"Please complete the live selfie step first.",account_blocked:"Your account is under review. Please contact support.",store_closed:"The store is temporarily closed. Please try again later.",too_many_open_orders:"Please wait until your current order is completed before buying again.",daily_limit:"You reached the daily limit for this payment method. Try again tomorrow.",identity_required:"Please enter your full name and phone number first.",invalid_phone:"Enter a valid Tunisian mobile number (8 digits).",invalid_name:"Enter your full name (first and last name).",identity_locked:"Your details are already saved. Contact support to change them.",amount_too_high:"That amount is above the limit for this payment method.",new_account_limit:"New accounts have a smaller limit during the first days.",promo_invalid:"This code is invalid or expired.",already_redeemed:"You already used this code.",promo_exists:"That code already exists.",not_completed:"You can review an order after it is completed.",already_reviewed:"You already reviewed this order.",insufficient_coins:"Not enough AstroCoins.",method_unavailable:"That payment method isn’t available.",invalid_permission:"Unknown permission.",busy_try_again:"Busy, please try again.",invalid_setting:"Invalid setting.",has_history:"This product has orders, so it can’t be deleted. Use Hide instead.",coming_soon:"This product is not live yet.",duplicate_reference:"That transaction ID was already used.",proof_required:"Please attach a screenshot of your payment.",ticket_closed:"This ticket is closed.",already_assigned:"Someone else already picked this up.",too_many_tickets:"You have 5 open tickets. Please wait for replies.",invalid_message:"Please write a subject and a message.",not_assigned:"This ticket belongs to another agent.",invalid_status:"Invalid status.",invalid_role:"Invalid role.",not_found:"Not found.",not_authenticated:"Please log in first.",insufficient_funds:"Your balance is too low. Top up first.",out_of_stock:"Sorry, this just sold out.",product_unavailable:"This product is no longer available.",input_required:"Please fill in the required detail.",price_changed:"The price just changed. Please review it.",too_many_pending:"You already have 3 pending top-ups. Wait for approval.",invalid_amount:"Invalid amount.",invalid_reference:"Please enter the payment reference.",forbidden:"Not allowed.",already_decided:"Already handled.",not_pending:"Order is not pending.",order_cancelled:"Order was cancelled."};
 const emsg=e=>ERR[e&&e.message]||(/fetch|network/i.test(e&&e.message||"")?"Network problem. Try again.":"Something went wrong. Please try again.");
 
 // theme
 const theme=localStorage.getItem("av_theme");if(theme==="light"||theme==="dark")document.documentElement.dataset.theme=theme;
 $("brand").textContent=C.BRAND;document.title=C.BRAND;$("contact").textContent=C.CONTACT.label;$("contact").href=C.CONTACT.url;
 
-const H0=location.hash;   // captured BEFORE supabase-js consumes the URL: email links return tokens or errors in the #hash
+const H0=location.hash;
+try{const rm=/[?&#]ref=([A-Za-z0-9]{4,12})/.exec(location.href);if(rm)localStorage.setItem("av_ref",rm[1])}catch(e){}   // remember who invited this visitor   // captured BEFORE supabase-js consumes the URL: email links return tokens or errors in the #hash
 const ready=window.supabase&&/^https:\/\//.test(C.SUPABASE_URL)&&!/YOUR-/.test(C.SUPABASE_URL+C.SUPABASE_KEY);
 const sb=ready?window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_KEY):null;
 const S={user:null,profile:null,perms:[],catalog:[],cat:"all",q:"",pend:null,buy:null};
@@ -38,7 +39,8 @@ async function rpc(fn,args){const{data,error}=await sb.rpc(fn,args||{});if(error
 function sheet(h){let o=$("sheet");if(!o){o=document.createElement("div");o.id="sheet";o.innerHTML='<div class="sh-bd" data-sh="x"></div><div class="sh-box"></div>';document.body.appendChild(o)}o.querySelector(".sh-box").innerHTML=h;o.classList.add("on")}
 function closeSheet(){const o=$("sheet");if(o){o.classList.remove("on");o.querySelector(".sh-box").innerHTML=""}}
 function modal(h){$("mb").innerHTML='<button type="button" class="x" data-a="closem" aria-label="Close">×</button>'+h;$("md").classList.remove("hide")}
-const closeModal=()=>$("md").classList.add("hide");
+let KS=null;function stopCam(){if(KS){KS.getTracks().forEach(t=>t.stop());KS=null}}
+const closeModal=()=>{$("md").classList.add("hide");stopCam()};
 
 // ---------- auth ----------
 let PEND=null;
@@ -49,10 +51,11 @@ function authUI(m){
  const H=`<div class="au-h">${astroAv(44)}<b>${esc(C.BRAND)}</b></div>`;
  const T={
   login:`${tabs}<form data-f="login" class="au-f">${f("ae","Email","email","email")}${f("ap","Password","password","current-password")}${go("Log in")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="otp">Email me a code</a><a href="#" data-a="auth" data-m="reset">Forgot password?</a></p>`,
-  signup:`${tabs}<form data-f="signup" class="au-f">${f("un","Username (3–20 letters/numbers)","text","username",'maxlength="20"')}${f("ae","Email","email","email")}${f("ap","Password (min 8)","password","new-password",'minlength="8"')}${f("ap2","Confirm password","password","new-password",'minlength="8"')}<label class="chk"><input type="checkbox" id="tos" required> <span>I agree to the Terms and Refund policy (links in the page footer).</span></label>${go("Send me a code")}</form>`,
+  signup:`${tabs}<form data-f="signup" class="au-f">${f("un","Username (3–20 letters/numbers)","text","username",'maxlength="20"')}${f("ae","Email","email","email")}${f("ap","Password (min 8)","password","new-password",'minlength="8"')}${f("ap2","Confirm password","password","new-password",'minlength="8"')}<label for="uc">Country (optional)</label><select id="uc"><option value="">Prefer not to say</option>${CC.map(c=>`<option value="${c}">${esc(cname(c))}</option>`).join("")}</select><label class="chk"><input type="checkbox" id="adult" required> <span>I am 18 or older.</span></label><label class="chk"><input type="checkbox" id="tos" required> <span>I agree to the Terms and Refund policy (links in the page footer).</span></label>${go("Send me a code")}</form>`,
   otp:`<h2>Log in with a code</h2><form data-f="otp" class="au-f">${f("ae","Email","email","email")}${go("Send code")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
   code:`<h2>Enter your code</h2><p class="en" style="font-size:14px">We sent a code to <b>${esc(PEND&&PEND.email)}</b>. Type it below, or tap the button inside the email.</p><form data-f="code" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="10"')}${go("Confirm")}</form><p class="au-sub"><a href="#" data-a="resend">Resend code</a></p>`,
   reset:`<h2>Reset password</h2><form data-f="reset" class="au-f">${f("ae","Email","email","email")}${go("Send reset link")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
+  mfa:`<h2>Two-step login</h2><p class="en" style="font-size:14px">Enter the 6-digit code from your authenticator app.</p><form data-f="mfa" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="6"')}${go("Confirm")}</form>`,
   newpass:`<h2>New password</h2><form data-f="newpass" class="au-f">${f("ap","New password","password","new-password",'minlength="8"')}${go("Save")}</form>`};
  modal(H+T[m]+'<p id="mm" class="au-m" role="status"></p>');const i=$("ae")||$("ap")||$("un")||$("cd");if(i)i.focus();
 }
@@ -68,13 +71,15 @@ async function authSubmit(mode){
   else if(mode=="signup"){const un=$("un").value.trim();
    if(!/^[A-Za-z0-9_.-]{3,20}$/.test(un))return msg("Username: 3–20 letters, numbers, . _ -",true);
    if(pw!==$("ap2").value)return msg("Passwords don’t match.",true);
-   r=await sb.auth.signUp({email:em,password:pw,options:{data:{username:un,terms_accepted_at:new Date().toISOString()},emailRedirectTo:back}});
+   r=await sb.auth.signUp({email:em,password:pw,options:{data:{username:un,terms_accepted_at:new Date().toISOString(),ref:localStorage.getItem("av_ref")||null,country:($("uc")||{}).value||null,adult:true},emailRedirectTo:back}});
    if(!r.error&&!r.data.session){PEND={email:em,type:"signup"};return authUI("code")}}
+  else if(mode=="mfa"){const{data:fs}=await sb.auth.mfa.listFactors();const fa=(fs&&fs.totp||[])[0];if(!fa)return msg("No authenticator found.",true);const{data:ch,error:e1}=await sb.auth.mfa.challenge({factorId:fa.id});if(e1)return msg(friendly(e1.message),true);r=await sb.auth.mfa.verify({factorId:fa.id,challengeId:ch.id,code:$("cd").value.trim()})}
   else if(mode=="otp"){r=await sb.auth.signInWithOtp({email:em,options:{shouldCreateUser:false}});if(!r.error){PEND={email:em,type:"email"};return authUI("code")}}
   else if(mode=="code")r=await sb.auth.verifyOtp({email:PEND.email,token:$("cd").value.trim(),type:PEND.type});
   else if(mode=="reset"){r=await sb.auth.resetPasswordForEmail(em,{redirectTo:back});if(!r.error){PEND={email:em,type:"recovery"};return authUI("code")}}   // reset now uses a CODE too (needs {{ .Token }} in the Reset Password email template)
   else{r=await sb.auth.updateUser({password:pw});if(!r.error){msg("Password updated.");return setTimeout(closeModal,900)}}
   if(r.error)return msg(friendly(r.error.message),true);if(mode=="code"&&PEND&&PEND.type==="recovery"){PEND=null;return authUI("newpass")}   // code accepted -> choose a new password
+  if((mode==="login"||mode==="code")&&sb.auth.mfa){const{data:al}=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(al&&al.nextLevel==="aal2"&&al.currentLevel!=="aal2")return authUI("mfa")}   // account has two-step login: ask for the code
   closeModal();
  }catch(e){msg("Network problem. Please try again.",true)}
 }
@@ -84,9 +89,10 @@ async function resendCode(){if(!PEND)return;if(Date.now()-RSAT<60000)return msg(
  try{const r=PEND.type==="signup"?await sb.auth.resend({type:"signup",email:PEND.email}):PEND.type==="recovery"?await sb.auth.resetPasswordForEmail(PEND.email,{redirectTo:location.origin+location.pathname}):await sb.auth.signInWithOtp({email:PEND.email,options:{shouldCreateUser:false}});
   msg(r.error?friendly(r.error.message):"A new code is on its way.",!!r.error)}catch(e){msg("Network problem. Please try again.",true)}}
 async function loadProfile(){
- let r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins,user_no").eq("id",S.user.id).maybeSingle();
+ let r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins,user_no,blocked,ref_code,country").eq("id",S.user.id).maybeSingle();
+ if(r.error)r=await sb.from("profiles").select("id,username,email,balance,role,notify_email,coins,user_no").eq("id",S.user.id).maybeSingle();
  if(r.error)r=await sb.from("profiles").select("id,username,email,balance,role,notify_email").eq("id",S.user.id).maybeSingle();   // older database without coins
- S.profile=r.data;
+ S.profile=r.data;if(S.profile&&S.profile.country&&!localStorage.getItem("av_country"))S.country=S.profile.country;
  try{S.perms=(await rpc("my_perms"))||[]}catch(e){S.perms=(S.profile&&ROLEP[S.profile.role])||[]}
 }
 async function setUser(u){if(u&&S.user&&S.user.id===u.id)return;S.user=u;S.profile=null;if(u)await loadProfile();if(window.AV&&AV.onAuth)AV.onAuth(u);chrome();route()}
@@ -123,7 +129,7 @@ function card(p){const stock=p.stock_left,out=!p.coming_soon&&stock!=null&&stock
  const was=d?reg:(p.retail_price>p.price?p.retail_price:null),sv=!d&&was?Math.round((1-p.price/was)*100):0;
  return `<button class="pcard${out||!rg.ok?" out":""}" data-a="product" data-id="${esc(p.id)}">${pimg(p)}<div class="pn">${esc(p.name)}</div><div class="pd">${esc(p.duration_label)}${p.brand?" · "+esc(p.brand):""}</div>
  <div class="pprice"><b>${money(p.price)}</b>${was?`<s class="red">${money(was)}</s>`:""}</div>
- <div class="pbd">${d?`<span class="pill hot">−${p.discount_percent}%</span>`:sv?`<span class="pill ok">−${sv}%</span>`:""}${p.trending?'<span class="pill hot">🔥 Trending</span>':""}${p.featured?'<span class="pill">⭐ Featured</span>':""}<span class="pill">${p.fulfillment==="instant"?"⚡ Instant":p.delivery_minutes>0?"🕒 "+spd(p.delivery_minutes):"🕒 On request"}</span>${p.coming_soon?'<span class="pill wait">Coming soon</span>':out?'<span class="pill no">Sold out</span>':stock!=null&&stock<=3?`<span class="pill wait">${stock} left</span>`:""}${!rg.ok?`<span class="pill no">${esc(rg.short)}</span>`:""}</div>
+ <div class="pbd">${d?`<span class="pill hot">−${p.discount_percent}%</span>`:sv?`<span class="pill ok">−${sv}%</span>`:""}${p.trending?'<span class="pill hot">🔥 Trending</span>':""}${p.featured?'<span class="pill">⭐ Featured</span>':""}${p.warranty_days>0?`<span class="pill">🛡️ ${p.warranty_days}d</span>`:""}<span class="pill">${p.fulfillment==="instant"?"⚡ Instant":p.delivery_minutes>0?"🕒 "+spd(p.delivery_minutes):"🕒 On request"}</span>${p.coming_soon?'<span class="pill wait">Coming soon</span>':out?'<span class="pill no">Sold out</span>':stock!=null&&stock<=3?`<span class="pill wait">${stock} left</span>`:""}${!rg.ok?`<span class="pill no">${esc(rg.short)}</span>`:""}</div>
  <div class="pd">${p.review_count?`👍 ${Math.round(p.positive_pct)}% · `:""}${p.sold?p.sold+" sold":"New"}</div></button>`}
 function shopGrid(){let l=S.catalog.filter(p=>(S.cat==="all"||p.category===S.cat)&&(!S.brand||p.brand===S.brand)&&(!S.sub||p.subcategory===S.sub)&&(!S.q||(p.name+" "+p.description+" "+(p.brand||"")).toLowerCase().includes(S.q)));
  if(S.sort==="low")l=l.slice().sort((a,b)=>a.price-b.price);else if(S.sort==="high")l=l.slice().sort((a,b)=>b.price-a.price);else if(S.sort==="best")l=l.slice().sort((a,b)=>(b.sold||0)-(a.sold||0));
@@ -141,7 +147,7 @@ document.addEventListener("change",e=>{const i=e.target.id,v=e.target.value;
 async function shop(t){
  const cats=[{id:"all",label:"All"}].concat(C.CATEGORIES);
  const html=()=>`<div class="box hero">${astroPose("hello",84)}<div><b>${esc(C.BRAND)}</b><p>Subscriptions and game top-ups at friendlier prices.</p>${ST&&ST.completed>0?`<p class="lk">✅ ${ST.completed} orders completed${ST.reviews>0&&ST.positive_pct!=null?" · 👍 "+Math.round(ST.positive_pct)+"% positive":""}</p>`:""}</div></div>
- <div class="steps"><div><i>1</i><b>Add money</b><small>to your wallet</small></div><div><i>2</i><b>Pick a product</b><small>and tap Buy</small></div><div><i>3</i><b>Get it</b><small>instantly or in hours</small></div></div>${S.user||localStorage.getItem("av_seen")?"":`<div class="box" style="margin-bottom:10px"><b>New here?</b> <a href="#" data-a="how">See how it works (30 seconds)</a></div>`}
+ ${(AV.store||{}).store_open==="0"?'<div class="box warn">⏸️ The store is temporarily closed. You can browse, but purchases are paused.</div>':""}${S.profile&&S.profile.blocked?'<div class="box warn">🔒 Your account is under review. Please contact support.</div>':""}<div class="steps"><div><i>1</i><b>Add money</b><small>to your wallet</small></div><div><i>2</i><b>Pick a product</b><small>and tap Buy</small></div><div><i>3</i><b>Get it</b><small>instantly or in hours</small></div></div>${S.user||localStorage.getItem("av_seen")?"":`<div class="box" style="margin-bottom:10px"><b>New here?</b> <a href="#" data-a="how">See how it works (30 seconds)</a></div>`}
  <div class="trust"><span>🔒 Verified payments</span><span>↩️ Refund if we can’t deliver</span><span>💬 Human support</span></div><input id="sq" class="search" type="search" placeholder="Search products or brands" value="${esc(S.q)}" autocomplete="off">
  <div id="fbar">${filterBar()}</div><div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>`;
  if(S.catalog.length)paint(t,html());else paint(t,'<div class="box ctr">Loading…</div>');
@@ -152,16 +158,18 @@ function openProduct(id,note){
  const p=S.catalog.find(x=>x.id===id);if(!p)return;const inst=p.fulfillment==="instant",stock=p.stock_left,out=!p.coming_soon&&stock!=null&&stock<=0,bal=S.profile?Number(S.profile.balance):0,need=p.price-bal,rg=region(p),d=(p.discount_percent||0)>0,reg=p.regular_price!=null?p.regular_price:p.price;
  S.buy={id,rid:uuid()};
  let btn;if(!S.user)btn='<button class="btn p" data-a="login">Log in to buy</button>';
+ else if(S.profile&&S.profile.blocked)btn='<button class="btn" disabled>Account under review</button>';
+ else if((AV.store||{}).store_open==="0")btn='<button class="btn" disabled>Store temporarily closed</button>';
  else if(!rg.ok)btn='<button class="btn" disabled>Not available in your country</button>';
- else if(out)btn='<button class="btn" disabled>Sold out</button>';
+ else if(out)btn=`<button class="btn p" data-a="watch" data-id="${p.id}">🔔 Notify me when back</button>`;
  else if(p.coming_soon)btn=`<button class="btn p" data-a="buy1">Buy for ${money(p.price)}</button>`;   // coming-soon: flow runs, then doBuy() explains
  else if(need>0)btn=`<button class="btn p" data-a="topup" data-need="${Math.ceil(need)}">Add ${money(need)} to buy</button>`;
  else btn=`<button class="btn p" data-a="buy1">Buy for ${money(p.price)}</button>`;
  const row=(k,v,cls)=>v?`<p class="meta"><span>${k}</span><b class="${cls||""}">${v}</b></p>`:"";
  sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button>${safeImg(p.image_url)?pimg(p,true):""}<div class="sh-h">${safeImg(p.image_url)?"":`<div class="pi">${esc(p.icon)}</div>`}<div><b class="wt-w">${esc(p.name)}</b><div class="pd">${esc(p.duration_label)} · ${esc(catLabel(p.category))}${p.offer_no?" · Offer OF-"+p.offer_no:""}</div></div></div>
  <div class="pprice mt"><b style="font-size:28px">${money(p.price)}</b>${(d||p.retail_price>p.price)?`<s class="red">${money(d?reg:p.retail_price)}</s>`:""}${d?` <span class="pill hot">−${p.discount_percent}%${p.discount_until?" · ends "+new Date(p.discount_until).toLocaleDateString():""}</span>`:""}</div>
- <div class="pbd" style="margin:6px 0">${p.review_count?`<a href="#" class="pill ok" data-a="reviews" data-id="${p.id}">👍 ${Math.round(p.positive_pct)}% · ${p.review_count} reviews</a>`:'<span class="pill">No reviews yet</span>'}<span class="pill">${p.sold||0} sold</span>${p.trending?'<span class="pill hot">🔥 Trending</span>':""}${p.featured?'<span class="pill">⭐ Featured</span>':""}</div>
- <div class="box" style="padding:8px 12px">${row("Can be activated in",esc(rg.text),rg.ok?"":"neg")}${row("Delivery",inst?"⚡ Instant":p.delivery_minutes>0?"🕒 "+spd(p.delivery_minutes):"🕒 On request")}${p.avg_delivery_min!=null?row("Average delivery",spd(Math.round(p.avg_delivery_min))+" (recent orders)"):""}${row("Brand",esc(p.brand||""))}${row("Type",esc(p.subcategory||""))}${row("In stock",stock!=null?(stock<=0?"Sold out":stock+" available"):"Available")}${row("Orders completed",String(p.completed||0))}</div>
+ <div class="pbd" style="margin:6px 0">${p.review_count?`<a href="#" class="pill ok" data-a="reviews" data-id="${p.id}">👍 ${Math.round(p.positive_pct)}% · ${p.review_count} reviews</a>`:'<span class="pill">No reviews yet</span>'}<span class="pill">${p.sold||0} sold</span>${p.warranty_days>0?`<span class="pill ok">🛡️ ${p.warranty_days}-day warranty</span>`:""}${p.trending?'<span class="pill hot">🔥 Trending</span>':""}${p.featured?'<span class="pill">⭐ Featured</span>':""}</div>
+ <div class="box" style="padding:8px 12px">${row("Can be activated in",esc(rg.text),rg.ok?"":"neg")}${row("Delivery",inst?"⚡ Instant":p.delivery_minutes>0?"🕒 "+spd(p.delivery_minutes):"🕒 On request")}${p.avg_delivery_min!=null?row("Average delivery",spd(Math.round(p.avg_delivery_min))+" (recent orders)"):""}${row("Warranty",p.warranty_days>0?"🛡️ "+p.warranty_days+"-day replacement":"")}${row("Brand",esc(p.brand||""))}${row("Type",esc(p.subcategory||""))}${row("In stock",stock!=null?(stock<=0?"Sold out":stock+" available"):"Available")}${row("Orders completed",String(p.completed||0))}</div>
  <p>${esc(p.description)}</p>
  ${p.input_label?`<label for="buyin">${esc(p.input_label)}</label><input id="buyin" maxlength="200" autocomplete="off">`:""}
  ${p.terms?`<details class="mt"><summary>Terms &amp; warranty</summary><p class="en" style="font-size:14px">${esc(p.terms)}</p></details>`:""}
@@ -187,19 +195,20 @@ async function doBuy(){
 //  AUTO  : "Pay automatically" -> exact-amount invoice (create_deposit_invoice) -> watch-deposits credits it on-chain, no screenshot.
 //  PROOF : pay, then submit amount + sender name + transaction ID + screenshot; staff verify (submit_topup). Always available as fallback.
 // Methods are typed (binance_pay | crypto | bank | link | manual); each type shows only the fields it needs.
-let PM=[],INV=null,INVT=null,SET={};
+let PM=[],INV=null,INVT=null,SET={},HASID=null;
 const usable=m=>m.coming_soon||m.kind==="manual"||!!m.details;
 const REFLAB={binance_pay:"Binance Pay order ID (from your receipt)",crypto:"Transaction hash (TXID)",address:"Transaction hash (TXID)",bank:"Transfer reference number",pay_id:"Payment / order ID from your receipt"};
 async function wallet(t){
  if(!S.user)return paint(t,login());
  await loadProfile();chrome();clearInterval(INVT);INV=null;
- const[tx,tp,pm,st]=await Promise.all([sb.from("wallet_transactions").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(30),sb.from("topup_requests").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(10),rpc("get_payment_methods").catch(()=>[]),sb.from("settings").select("key,value")]);
- SET={};(st.data||[]).forEach(r=>SET[r.key]=r.value);
+ const[tx,tp,pm,st,idr]=await Promise.all([sb.from("wallet_transactions").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(30),sb.from("topup_requests").select("*").eq("user_id",S.user.id).order("created_at",{ascending:false}).limit(10),rpc("get_payment_methods").catch(()=>[]),sb.from("settings").select("key,value"),sb.from("customer_identity").select("full_name,phone_display,phone_verified,selfie_path").eq("user_id",S.user.id).maybeSingle()]);
+ SET={};(st.data||[]).forEach(r=>SET[r.key]=r.value);HASID=(idr&&idr.data)||null;
  PM=(pm||[]).filter(usable);const T=C.TOPUP,pre=S.pend||T.presets[1]||10;S.pend=null;
  if(!PM.find(m=>m.id===S.meth&&!m.coming_soon))S.meth=(PM.find(m=>!m.coming_soon)||{}).id;
  const rate=parseInt(SET.coin_redeem||"100"),coins=(S.profile&&S.profile.coins)||0,redeemable=Math.floor(coins/rate)*rate;
  paint(t,`<div class="box wal"><span class="en">Wallet balance</span><b>${money(S.profile&&S.profile.balance)}</b><span class="en" style="font-size:13px">$1 = 1.00 site balance</span></div>
  <div class="box mt coinbox"><div><b>🪙 ${coins} AstroCoins</b><div class="lk">Earn ${esc(SET.coin_earn||"2")} per $1 you spend · ${rate} coins = $1</div></div>${redeemable?`<button class="btn" data-a="redeem">Redeem ${redeemable} → ${money(redeemable/rate)}</button>`:""}</div>
+ <div class="box mt"><b>🎟️ Have a promo code?</b><div class="sfind"><input id="pcode" placeholder="CODE" maxlength="24" autocomplete="off"><button class="btn p" data-a="redeempromo">Redeem</button></div></div>
  <div class="box mt"><h2>Add money</h2><p class="en" style="font-size:14px">Add money to your wallet, then spend it in the shop. Three quick steps.</p><label for="tamt">① How much? (${money(T.min)}–${money(T.max)})</label><div>${T.presets.map(a=>`<button type="button" class="chip" data-a="amt" data-v="${a}">${money(a)}</button>`).join("")}</div>
  <input id="tamt" type="number" min="${T.min}" max="${T.max}" step="0.01" value="${pre}">
  <label>② How do you want to pay?</label><div id="tmeths">${PM.map(m=>`<button type="button" class="chip${S.meth===m.id?" on":""}" data-a="meth" data-id="${esc(m.id)}" ${m.coming_soon?"disabled":""}>${esc(m.label)}${m.coming_soon?" · soon":""}</button>`).join("")||'<span class="en">No payment method is set up yet.</span>'}</div>
@@ -216,6 +225,8 @@ async function wallet(t){
 }
 // Show the selected method: only the details its type needs (Pay ID / address+network / bank fields / link) + QR + warnings.
 function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;if(!m){i.textContent="";$("tauto").innerHTML="";return}
+ if(m.strict&&!kycDone()){i.innerHTML=kycHTML();$("tauto").innerHTML="";if($("tdet"))$("tdet").style.display="none";return}   // identity check first: QR stays hidden
+ if($("tdet"))$("tdet").style.display="";
  const meta=m.meta||{},cp=(id,txt)=>`<div class="cred" id="${id}">${esc(txt)}</div><button type="button" class="btn" data-a="copyel" data-id="${id}">Copy</button>`;let h="";
  if(m.kind==="binance_pay")h=`<p>Open Binance → <b>Pay</b> → <b>Send</b>, scan the QR or enter this Pay ID, and send in <b>USDT</b>.</p><p class="meta"><span>Binance Pay ID</span></p>${cp("c1",m.details)}${meta.name?`<p class="lk">Account name: ${esc(meta.name)}</p>`:""}`;
  else if(m.kind==="pay_id")h=`<p>Open the <b>${esc(meta.app||"payment")}</b> app, scan the QR or enter this ID, and send the amount.</p><p class="meta"><span>${esc(meta.app||"Payment")} ID</span></p>${cp("c1",m.details)}`;
@@ -224,10 +235,22 @@ function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;
  else if(m.kind==="link"&&/^https:\/\//.test(m.details))h=`<a class="btn p" style="display:block;text-decoration:none" href="${esc(m.details)}" target="_blank" rel="noopener">Open payment page</a>`;
  if(m.image_url&&/^(assets\/|https:\/\/)/.test(m.image_url))h+=`<img class="qr" src="${esc(m.image_url)}" alt="QR code" width="190" height="190">`;
  if(m.instructions)h+=`<p class="lk">${esc(m.instructions)}</p>`;
- i.innerHTML=h;$("trlab").textContent=REFLAB[m.kind]||"Reference";
+ if(m.strict){h=`<p class="warn">🔒 For your security, ${esc(m.label)} payments need your full name and phone number. One pending payment at a time${m.max_per_topup?", up to "+money(m.max_per_topup)+" each":""}. New accounts start with smaller limits.</p>`+h+(HASID?`<p class="lk">✅ Identity on file: ${esc(HASID.full_name)} · ${esc(HASID.phone_display)}</p>`:"")}
+ if(m.currency&&m.currency!=="USD")h+=`<p class="meta"><span>You will send</span><b id="tndv"></b></p>`;
+ i.innerHTML=h;tndUpdate();$("trlab").textContent=REFLAB[m.kind]||"Reference";
  $("tauto").innerHTML=m.auto_verify?`<button type="button" class="btn p" data-a="mkinv">Pay automatically</button><p class="lk">We give you an exact amount to send. Your wallet is credited automatically, usually within minutes. No screenshot needed.</p>`:"";
  $("tdet").open=!m.auto_verify;$("tsum").textContent=m.auto_verify?"Already paid but not credited? Send proof":"③ I’ve paid: send proof so we can add the money";
 }
+// ---- D17-style identity check: details -> phone verified by Telegram -> live selfie. QR + instructions stay hidden until all 3 are done. ----
+const kycDone=()=>!!(HASID&&HASID.phone_verified&&HASID.selfie_path);
+function kycHTML(){const TG=(AV.store||{}).telegram_bot,st=!HASID?1:!HASID.phone_verified?2:3,step=(n,l)=>`<div><i>${st>n?"✓":n}</i><b>${l}</b></div>`;
+ const head=`<p class="warn">🔒 For your security, this payment method needs a quick one-time identity check (about 1 minute).</p><div class="steps">${step(1,"Your details")}${step(2,"Verify phone")}${step(3,"Selfie")}</div>`;
+ if(st===1)return head+`<label for="idn">Full name (as on your payment account)</label><input id="idn" maxlength="80" autocomplete="name"><label for="idp">Mobile number</label><input id="idp" inputmode="tel" maxlength="20" placeholder="+216 XX XXX XXX" autocomplete="tel"><label class="chk"><input type="checkbox" id="idc"> <span>I am 18 or older, and I agree that AstroVault stores my name, phone number and selfie to prevent fraud (only security staff can see them).</span></label><div style="height:8px"></div><button type="button" class="btn p" data-a="kyc1">Continue</button><p id="kycm" class="au-m" role="status"></p>`;
+ if(st===2)return head+`<p class="en">Verify that this number is yours: ${esc(HASID.phone_display)}</p>`+(TG?`<button type="button" class="btn p" data-a="kycphone">✈️ Verify with Telegram</button><p class="lk">Telegram opens, tap “Share my phone number”, then come back here. Free and takes 10 seconds.</p><p id="kycm" class="au-m" role="status"></p>`:`<p class="en">Phone verification is done by our team. Message us on Telegram and we will confirm it quickly.</p>${AV.contactsHTML()}`);
+ return head+`<p class="en">Last step: take a live selfie with your phone camera. Your face must be clearly visible. Photos from your gallery are not accepted.</p><button type="button" class="btn p" data-a="kycselfie">📷 Take selfie</button><p id="kycm" class="au-m" role="status"></p>`}
+// Local-currency amount for methods like D17 (rate set by the owner in Store settings)
+function tndUpdate(){const m=PM.find(x=>x.id===S.meth),el=$("tndv");if(!el||!m)return;const a=parseFloat($("tamt").value),r=parseFloat(SET.tnd_rate||"0");el.textContent=(a>0&&r>0)?(Math.ceil(a*r*100)/100).toFixed(2)+" "+(m.currency||""):"—"}
+document.addEventListener("input",e=>{if(e.target.id==="tamt")tndUpdate()});
 // Auto flow: reserve exact amount -> poll until credited / expired.
 async function mkInvoice(){
  const amt=parseFloat($("tamt").value),T=C.TOPUP,el=$("tmsg");el.style.color="#dc2626";
@@ -252,10 +275,13 @@ async function topupSubmit(){
  if(!m||m.coming_soon)return fail("Choose an available payment method.");
  if(!file)return fail("Please attach a screenshot of your payment.");
  if(!/^image\/(png|jpeg|webp)$/.test(file.type)||file.size>5242880)return fail("Screenshot must be PNG, JPG or WebP under 5 MB.");
+ if(m.strict&&!kycDone())return fail("Please complete the identity check first.");
+ if(m.strict&&!HASID){const nm=($("idn")||{}).value||"",ph=($("idp")||{}).value||"";   // strict methods: save full name + phone once, before anything else
+  try{const r=await rpc("submit_identity",{p_full_name:nm,p_phone:ph});if(!r||!r.ok)return fail(r&&r.error==="phone_in_use"?"This phone number is linked to another account. Please contact support.":"Could not save your details.");HASID={full_name:nm.trim(),phone_display:ph}}catch(x){return fail(emsg(x))}}
  btn.disabled=true;el.style.color="var(--mut)";el.textContent="Uploading proof…";
  try{const ext=file.type.split("/")[1].replace("jpeg","jpg"),path=S.user.id+"/"+uuid()+"."+ext;
   const up=await sb.storage.from("proofs").upload(path,file,{contentType:file.type});if(up.error)throw up.error;
-  await rpc("submit_topup",{p_amount:parseFloat($("tamt").value),p_method:m.label,p_reference:$("tref").value,p_sender:$("tname").value,p_proof:path});
+  await rpc("submit_topup_v2",{p_amount:parseFloat($("tamt").value),p_method_id:m.id,p_reference:$("tref").value,p_sender:$("tname").value,p_proof:path});
   pop("Submitted. We’ll verify it soon.");route();
  }catch(x){fail(emsg(x));btn.disabled=false}
 }
@@ -277,6 +303,7 @@ async function openOrder(id){const o=ORD.find(x=>x.id===id);if(!o)return;
  ${o.delivery?`<div class="cred" id="dl">${esc(o.delivery)}</div><button class="btn" data-a="copyel" data-id="dl">Copy details</button>`:""}
  ${o.status==="pending"||o.status==="processing"?`<p class="en">We’re working on it and you’ll get a notification when it’s ready.</p>`:""}
  ${o.status==="cancelled"?`<p class="en">Cancelled. Any payment was refunded to your wallet.${o.admin_note?" Note: "+esc(o.admin_note):""}</p>`:o.admin_note?`<p class="en">Note: ${esc(o.admin_note)}</p>`:""}
+ ${o.expires_at?`<p class="en" style="font-size:14px">⏳ ${new Date(o.expires_at)>new Date()?"Ends":"Ended"} on ${new Date(o.expires_at).toLocaleDateString()}</p>${o.product_id?`<button class="btn" data-a="renew" data-id="${o.product_id}">🔁 Renew</button>`:""}`:""}${o.warranty_until?`<p class="en" style="font-size:14px">🛡️ Warranty ${new Date(o.warranty_until)>new Date()?"until":"ended"} ${new Date(o.warranty_until).toLocaleDateString()}</p>`:""}
  <div id="rvbox"></div><div style="height:10px"></div><button class="btn" data-a="help" data-id="${o.id}">Need help with this order?</button>`);
  if(o.status==="completed"){const{data:rv}=await sb.from("reviews").select("positive,comment").eq("order_id",o.id).maybeSingle();const bx=$("rvbox");if(!bx)return;
   bx.innerHTML=rv?`<p class="en">Your review: ${rv.positive?"👍":"👎"} ${esc(rv.comment||"")}</p>`:`<p class="en"><b>How was it?</b></p><div class="row"><button class="btn" data-a="rvpick" data-v="1">👍 Good</button><button class="btn" data-a="rvpick" data-v="0">👎 Not good</button></div><textarea id="rvc" rows="2" maxlength="500" placeholder="Optional comment"></textarea><button class="btn p" id="rvgo" data-a="rvsend" data-id="${o.id}" disabled>Send review</button>`}}
@@ -287,11 +314,14 @@ function account(t){
  paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>${esc(p.username)}</b><div class="lk">${esc(p.email)}${p.user_no?" · ID #"+p.user_no:""}</div></div></div>
  <div class="acc3"><button data-go="wallet"><b>${money(p.balance)}</b><small>Wallet · add money</small></button><button data-go="orders"><b>📦</b><small>My orders</small></button><button data-go="support"><b>💬</b><small>Get help</small></button></div></div>
  <h3>Settings</h3><div class="box"><label for="th">Appearance</label><select id="th"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
+ <label for="lang">Language</label><select id="lang"><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option></select>
  <label class="chk"><input type="checkbox" id="nt" ${p.notify_email!==false?"checked":""}> <span>Email me order and support updates</span></label></div>
  <h3>Security</h3><div class="box"><p class="en" style="font-size:14px">We never ask for your password or codes. Staff will never message you first asking for them.</p><button class="btn" data-a="pw">Change password</button></div>
+ ${p.ref_code?`<h3>Invite friends</h3><div class="box"><p class="en" style="font-size:14px">When a friend joins with your link and completes a first purchase, you both earn AstroCoins.</p><div class="cred" id="refl">${esc(location.origin+location.pathname+"?ref="+p.ref_code)}</div><button class="btn" data-a="copyel" data-id="refl">Copy my link</button></div>`:""}
+ <h3>Two-step login</h3><div class="box"><p class="en" style="font-size:14px">Protect your account with a 6-digit code from an authenticator app. Required for staff.</p><div class="row"><button class="btn" data-a="mfa-on">Turn on</button><button class="btn" data-a="mfa-off">Turn off</button></div></div>
  <h3>Learn more</h3><div class="box row"><button class="btn" data-a="how">How it works</button><button class="btn" data-a="faq">FAQ</button><button class="btn" data-a="refunds">Refunds</button></div>
  <div style="height:10px"></div><button class="btn" data-a="logout">Log out</button>`);
- $("th").value=localStorage.getItem("av_theme")||"auto";
+ $("th").value=localStorage.getItem("av_theme")||"auto";if($("lang"))$("lang").value=(window.AV&&AV.lang)||"en";
 }
 
 // ---------- router ----------
@@ -329,7 +359,7 @@ document.addEventListener("input",e=>{if(e.target.id==="sq"){S.q=e.target.value.
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeSheet();closeModal()}});
 document.addEventListener("submit",async e=>{
  const f=e.target.closest("[data-f]");if(!f)return;e.preventDefault();const k=f.dataset.f;
- if(["login","signup","otp","code","reset","newpass"].includes(k))return authSubmit(k);
+ if(["login","signup","otp","code","reset","newpass","mfa"].includes(k))return authSubmit(k);
  if(k==="topup")return topupSubmit();
  if(AV.form[k])return AV.form[k](f,e);   // forms registered by support.js / staff.js
 });
@@ -343,13 +373,50 @@ AV.act.rvsend=async el=>{try{await rpc("leave_review",{p_order:el.dataset.id,p_p
 AV.act.reviews=async el=>{const p=S.catalog.find(x=>x.id===el.dataset.id);if(!p)return;let r=[];try{r=await rpc("get_reviews",{p_product:p.id,p_limit:30})||[]}catch(e){}
  sheet(`<button type="button" class="x" data-a="closesheet" aria-label="Close">×</button><h2>Reviews</h2><p class="lk">${esc(p.name)} · ${p.review_count?Math.round(p.positive_pct)+"% positive ("+p.review_count+")":"No reviews yet"}. Only verified buyers can review.</p>${r.map(x=>`<div class="tx"><span>${x.positive?"👍":"👎"} ${esc(x.who)}<small>${esc(x.comment||"(no comment)")} · ${when(x.created_at)}</small></span></div>`).join("")||'<p class="en">No reviews yet.</p>'}<div style="height:10px"></div><button class="btn" data-a="product" data-id="${p.id}">← Back to offer</button>`)};
 AV.act.pchat=el=>{const p=S.catalog.find(x=>x.id===el.dataset.id);if(!p)return;if(!S.user){closeSheet();return authUI("login")}AV.newTicket("product",null,"Question about "+p.name+(p.offer_no?" (Offer OF-"+p.offer_no+")":""))};
+// ---------- identity check actions (D17) ----------
+let KYT=null;
+AV.act.kyc1=async()=>{const el=$("kycm"),nm=($("idn")||{}).value||"",ph=($("idp")||{}).value||"";el.style.color="#dc2626";
+ if(!$("idc").checked)return el.textContent="Please tick the box to continue.";
+ try{const r=await rpc("submit_identity",{p_full_name:nm,p_phone:ph});if(!r||!r.ok)return el.textContent=(r&&r.error==="phone_in_use")?"This phone number is linked to another account. Please contact support.":"Could not save your details.";route()}catch(e){el.textContent=emsg(e)}};
+AV.act.kycphone=async()=>{const TG=(AV.store||{}).telegram_bot,el=$("kycm");
+ try{const tok=await rpc("start_phone_verification"),url="https://t.me/"+TG+"?start="+tok;window.open(url,"_blank");
+  el.innerHTML='Telegram should open. <a href="'+esc(url)+'" target="_blank" rel="noopener">Tap here if it did not</a>. Waiting for your confirmation…';clearInterval(KYT);let n=0;
+  KYT=setInterval(async()=>{if(!$("kycm")||++n>100)return clearInterval(KYT);const{data}=await sb.from("customer_identity").select("phone_verified").eq("user_id",S.user.id).maybeSingle();if(data&&data.phone_verified){clearInterval(KYT);pop("✅ Phone verified");route()}},3000)}
+ catch(e){el.style.color="#dc2626";el.textContent=emsg(e)}};
+// Live camera only (no gallery picker). The photo is cropped square, uploaded to the PRIVATE "selfies" bucket and linked by submit_selfie().
+AV.act.kycselfie=async()=>{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return pop("Camera is not available on this device or browser");
+ try{KS=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640},height:{ideal:640}},audio:false})}catch(e){return pop("Please allow camera access to continue")}
+ modal(`<h2>Live selfie</h2><p class="en" style="font-size:14px">Look at the camera in good light. We use this only to protect against fraud.</p><div class="pimg wide" style="margin-top:6px"><video id="kv" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video></div><button type="button" class="btn p" data-a="kycsnap">📸 Take photo</button><div style="height:8px"></div><button type="button" class="btn" data-a="kyccancel">Cancel</button><p id="mm" class="au-m" role="status"></p>`);$("kv").srcObject=KS};
+AV.act.kycsnap=async()=>{const v=$("kv");if(!v||!v.videoWidth)return msg("Camera is not ready yet.",true);
+ const s=Math.min(v.videoWidth,v.videoHeight),c=document.createElement("canvas");c.width=c.height=Math.min(640,s);c.getContext("2d").drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);
+ const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.82));msg("Uploading…");
+ try{const path=S.user.id+"/"+uuid()+".jpg",up=await sb.storage.from("selfies").upload(path,blob,{contentType:"image/jpeg"});if(up.error)throw up.error;await rpc("submit_selfie",{p_path:path});stopCam();closeModal();pop("✅ Identity check complete");route()}catch(e){msg(emsg(e),true)}};
+AV.act.kyccancel=()=>closeModal();
+// ---------- store profile, contacts, promo codes, back-in-stock, renewals, two-step setup ----------
+AV.store={};
+// Chat-app buttons built from Staff > Store settings (Telegram is the default). Shown on Help, About and the footer.
+AV.contactsHTML=()=>{const s=AV.store||{},b=[],tg=(s.contact_telegram||"@AXTROVIII").replace(/^@/,""),wa=(s.contact_whatsapp||"").replace(/[^0-9]/g,""),dc=s.contact_discord||"",ig=(s.contact_instagram||"").replace(/^@/,"");
+ if(tg)b.push(`<a class="btn p" href="https://t.me/${esc(tg)}" target="_blank" rel="noopener">✈️ Telegram</a>`);
+ if(wa)b.push(`<a class="btn p" href="https://wa.me/${esc(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`);
+ if(/^https:\/\//.test(dc))b.push(`<a class="btn p" href="${esc(dc)}" target="_blank" rel="noopener">🎮 Discord</a>`);
+ if(ig)b.push(`<a class="btn" href="https://instagram.com/${esc(ig)}" target="_blank" rel="noopener">📷 Instagram</a>`);
+ return `<div class="box mt"><b>Chat with us</b><p class="lk">Usual reply time: ${esc(s.response_time||"within a few hours")}</p><div class="row">${b.join("")}</div></div>`};
+AV.openProductById=async id=>{if(!S.catalog.length){try{S.catalog=await rpc("get_catalog")}catch(e){}}if(S.catalog.find(x=>x.id===id))openProduct(id);else pop("This offer is no longer available")};
+AV.act.renew=el=>AV.openProductById(el.dataset.id);
+AV.act.watch=async el=>{if(!S.user){closeSheet();return authUI("login")}try{const on=await rpc("toggle_watch",{p_product:el.dataset.id});pop(on?"🔔 We’ll notify you when it’s back":"Notification removed")}catch(e){pop(emsg(e))}};
+AV.act.redeempromo=async()=>{const c=($("pcode")||{}).value;if(!c||!c.trim())return;try{const r=await rpc("redeem_promo",{p_code:c});pop("🎉 "+(r.kind==="credit"?money(r.value)+" added to your wallet":r.value+" AstroCoins added"));await loadProfile();chrome();route()}catch(e){pop(emsg(e))}};
+let MFAID=null;
+AV.act["mfa-on"]=async()=>{if(!S.user)return;const{data,error}=await sb.auth.mfa.enroll({factorType:"totp",friendlyName:"AstroVault "+Date.now()});if(error)return pop(error.message);MFAID=data.id;
+ modal(`<h2>Two-step login</h2><p class="en" style="font-size:14px">1) Open an authenticator app (Google Authenticator, Authy…). 2) Scan this QR, or type the key by hand. 3) Enter the 6-digit code it shows.</p><img class="qr" src="${data.totp.qr_code}" alt="QR code" width="180" height="180"><div class="cred" id="mfk">${esc(data.totp.secret)}</div><button class="btn" data-a="copyel" data-id="mfk">Copy key</button><form data-f="mfaverify" class="au-f"><label for="mc6">6-digit code</label><input id="mc6" inputmode="numeric" maxlength="6" required><div style="height:10px"></div><button class="btn p">Turn on</button></form><p id="mm" class="au-m"></p>`)};
+AV.form.mfaverify=async()=>{const{data:ch,error:e1}=await sb.auth.mfa.challenge({factorId:MFAID});if(e1)return msg(friendly(e1.message),true);const{error}=await sb.auth.mfa.verify({factorId:MFAID,challengeId:ch.id,code:$("mc6").value.trim()});if(error)return msg(friendly(error.message),true);closeModal();pop("✅ Two-step login is on")};
+AV.act["mfa-off"]=async()=>{const{data}=await sb.auth.mfa.listFactors();const f=(data&&data.totp||[])[0];if(!f)return pop("Two-step login is not on");if(!confirm("Turn off two-step login?"))return;const{error}=await sb.auth.mfa.unenroll({factorId:f.id});pop(error?error.message:"Two-step login turned off")};
 
 // ---------- boot ----------
 // Start only after ALL scripts (support.js, staff.js, legal.js) have registered their screens; otherwise a page reload on #/staff or #/support
 // could route before those screens exist and fall back to the shop.
 function start(){
 if(!ready){app.innerHTML=`<div class="box cfg ctr">${astroPose("guide",100)}<h2>Almost there</h2><p class="en">Open <b>config.js</b> and paste your Supabase URL and publishable key. Then run <b>supabase/schema.sql</b> in the Supabase SQL Editor. See NEXT_STEPS.md.</p></div>`;$("acct").classList.add("hide")}
-else{chrome();route();
+else{rpc("get_store_profile").then(s=>{AV.store=s||{};if(cur()==="support"||cur()==="shop")route()}).catch(()=>{});chrome();route();
  // Email-link problems used to fail silently. Now: expired/used link -> clear message + fresh reset; valid recovery link -> password form.
  if(/error_description=|error_code=/.test(H0)){history.replaceState(null,"",location.pathname+"#/shop");
   setTimeout(()=>{authUI("reset");msg("That link expired or was already used (some email apps open links before you do). Enter your email to get a fresh code.",true)},500)}

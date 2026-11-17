@@ -19,6 +19,41 @@ Static site, no build step, vanilla JS. All money + permission logic is in Postg
 - Shop: live search, trust strip, manual-order ETA (config ETA_MANUAL). Balance chip refreshes when a notification arrives (support.js).
 - Password-reset email keeps the default link template ({{ .ConfirmationURL }}); only Confirm signup + Magic Link use {{ .Token }}.
 
+## v9 + v10 additions (security, D17 identity check, growth, languages)
+- schema_v9.sql (after v8): strict payment methods (D17: identity, ONE pending top-up, caps, TND conversion, new-account limit), fraud_flags + auto-hold (phone reused, repeated rejected proofs, velocity),
+  block/unblock, perm 'security', staff 2FA enforcement switch, warranty/duration + renewal reminders (pg_cron daily), low-stock + back-in-stock, referrals, promo/credit codes, store profile, store open/closed.
+- schema_v10.sql (after v9): phone verified through Telegram bot (free), live selfie (private bucket), country at signup. Strict top-ups need both (switchable in Store settings).
+- Edge Functions (deploy in Supabase dashboard, steps are at the top of each file): send-emails (Gmail SMTP, order/payment/refund/renewal emails), telegram-bot (phone verification, verify JWT OFF).
+- Front end: staff_extra.js (Security, Growth, Store settings, Reports & backup, order search, low-stock), i18n.js (French/Arabic + RTL), contacts (Telegram default), About from Store settings, warranty badge, renewals, referral link, promo redeem, notify-me, two-step login.
+- NOT built on purpose: automatic face recognition (needs paid server-side service; browser-only checks are bypassable), ID card number/photo (unverifiable + heavy legal duty). Selfie + verified phone + D17 receipt name check is the proportionate level.
+- LEGAL: collecting selfies/phones in Tunisia may need declaration/authorisation (INPDP, personal-data law). Get a local lawyer/accountant to confirm before launch. Privacy/Terms text already mention these data.
+- Untested on real Supabase: schema_v9.sql, schema_v10.sql, both Edge Functions. Run SQL in order and fix errors first.
+
+## v8 additions (product pictures)
+- schema_v8.sql (after v7): products.image_url, public bucket product-images (only 'products' permission may upload), get_catalog returns image_url.
+- Staff product form: picture upload (resized to 900px JPEG in the browser). Cards/offer page show the picture; broken or missing image falls back to the emoji tile.
+- vercel.json: security headers (nosniff, frame deny, referrer policy). Optional.
+- NOTE: do not use official brand logos (Netflix, Spotify...) without permission; use your own artwork or neutral product images.
+
+## v7 additions (marketplace offers)
+- schema_v7.sql (run after v6): products get offer_no (OF-1001..), brand, subcategory, delivery_minutes, stock_qty (manual items, counts down in _purchase_core, restocked on cancel),
+  sold_offset ("past sales", REAL numbers only), discount_percent/discount_until (eff_price() is what customers pay), featured, region_mode/region_list;
+  profiles.user_no (public account ID from 100001); reviews (verified buyers, one per completed order, leave_review/get_reviews/store_stats);
+  get_catalog rebuilt with sold, completed, avg delivery (last 30 completed orders, min 3), rating %, trending (top 3 by 7-day sales, min 3). _purchase_core + admin_cancel_order regenerated.
+- UI: offer cards (red crossed price, trending, rating, sold, region warning), filters (country, brand, type, sort), offer page (info table, reviews, chat button), review form in completed orders,
+  staff product form with all fields, Discount + Restock buttons, customer search by account ID.
+- Region check is a guide only (customer picks their own country); not enforced server-side.
+- TODO: hide/moderate reviews UI, live-chat widget (agents online) separate from tickets, user-posted products later.
+
+## v6 additions (UX overhaul + RedotPay)
+- schema_v6.sql (run after v5): new payment type pay_id + RedotPay row (ID 1546339006, assets/redotpay.png); ticket topics order/payment/topup/refund/account/password/product/other.
+- Staff UI = home with tiles + customer search; each tile opens a section with "<- Staff home". CUSTOMER CARD (act.ucard in staff.js): balance, orders, ledger, tickets, quick top-up form. Reachable from search, Top-ups, Orders and ticket chat.
+- Fixed red error "more than one relationship topup_requests/profiles": embed now names the FK (profiles!topup_requests_user_id_fkey).
+- Customer UX (from checkout research: linear 2-3 steps, price/balance shown before paying, trust cues only where money moves, one obvious next button): 3-step strip on shop,
+  header chip "+ Add money", wallet steps 1-2-3, help centre with topic tiles, account page with 3 quick tiles, "How it works" modal (legal.js, act.how) + first-visit hint.
+- app.js now starts on window load so reloading #/staff or #/support never falls back to the shop.
+- TODO ideas: internal staff notes in tickets, Google login, username login via Edge Function, order search, shop categories as tabs.
+
 ## v5 additions (permissions, payments, coins, auto-deposits)
 - SQL: supabase/schema_v5.sql (run after v2, v3). Granular permissions (has_perm/my_perms/set_user_perms; role defaults + per-person grants/revokes),
   typed payment methods (binance_pay|crypto|bank|link|manual + QR + auto_verify), AstroCoins (earn via trigger on completed orders, redeem_coins,
@@ -33,7 +68,7 @@ Static site, no build step, vanilla JS. All money + permission logic is in Postg
 - UNTESTED: schema_v5.sql, watch-deposits, Binance polling. UI tested with mocked Supabase only.
 
 ## Run order (owner)  (then schema_v3.sql: product delete)
-1. NEW Supabase project -> SQL Editor, in this order: schema.sql, schema_v2.sql, schema_v3.sql, schema_v5.sql, seed.sql, seed_payments.sql.
+1. NEW Supabase project -> SQL Editor, in this order: schema.sql, schema_v2.sql, schema_v3.sql, schema_v5.sql, schema_v6.sql, schema_v7.sql, schema_v8.sql, schema_v9.sql, schema_v10.sql, seed.sql, seed_payments.sql.
 2. config.js: Project URL + publishable key (never service_role).
 3. Auth email template "Confirm signup" must contain {{ .Token }}. Add site URL in Auth > URL config.
 4. Sign up on the site; SQL: `update public.profiles set role='owner' where email='you@example.com';`
