@@ -233,7 +233,7 @@ function methInfo(){const m=PM.find(x=>x.id===S.meth),i=$("tinfo");if(!i)return;
  else if(m.kind==="crypto"||m.kind==="address")h=`<p class="warn">⚠️ Send only <b>${esc(meta.coin||"USDT")}</b> on the <b>${esc(meta.network||"correct")}</b> network. Anything sent on another network is lost.</p>${cp("c1",m.details)}`;
  else if(m.kind==="bank")h=`${meta.bank?`<p class="meta"><span>Bank</span><b>${esc(meta.bank)}</b></p>`:""}${meta.holder?`<p class="meta"><span>Account holder</span><b>${esc(meta.holder)}</b></p>`:""}${cp("c1",m.details)}`;
  else if(m.kind==="link"&&/^https:\/\//.test(m.details))h=`<a class="btn p" style="display:block;text-decoration:none" href="${esc(m.details)}" target="_blank" rel="noopener">Open payment page</a>`;
- if(m.image_url&&/^(assets\/|https:\/\/)/.test(m.image_url))h+=`<img class="qr" src="${esc(m.image_url)}" alt="QR code" width="190" height="190">`;
+ if(m.image_url&&/^(https:\/\/|[\w\-\/]+\.(png|jpe?g|webp)$)/i.test(m.image_url))h+=`<img class="qr" src="${esc(m.image_url)}" alt="QR code" width="220" height="220" onerror="this.outerHTML='<p class=&quot;lk&quot;>QR unavailable. Use the ID above.</p>'">`;
  if(m.instructions)h+=`<p class="lk">${esc(m.instructions)}</p>`;
  if(m.strict){h=`<p class="warn">🔒 For your security, ${esc(m.label)} payments need your full name and phone number. One pending payment at a time${m.max_per_topup?", up to "+money(m.max_per_topup)+" each":""}. New accounts start with smaller limits.</p>`+h+(HASID?`<p class="lk">✅ Identity on file: ${esc(HASID.full_name)} · ${esc(HASID.phone_display)}</p>`:"")}
  if(m.currency&&m.currency!=="USD")h+=`<p class="meta"><span>You will send</span><b id="tndv"></b></p>`;
@@ -250,7 +250,8 @@ function kycHTML(){const TG=(AV.store||{}).telegram_bot,st=!HASID?1:!HASID.phone
  return head+`<p class="en">Last step: take a live selfie with your phone camera. Your face must be clearly visible. Photos from your gallery are not accepted.</p><button type="button" class="btn p" data-a="kycselfie">📷 Take selfie</button><p id="kycm" class="au-m" role="status"></p>`}
 // Local-currency amount for methods like D17 (rate set by the owner in Store settings)
 function tndUpdate(){const m=PM.find(x=>x.id===S.meth),el=$("tndv");if(!el||!m)return;const a=parseFloat($("tamt").value),r=parseFloat(SET.tnd_rate||"0");el.textContent=(a>0&&r>0)?(Math.ceil(a*r*100)/100).toFixed(2)+" "+(m.currency||""):"—"}
-document.addEventListener("input",e=>{if(e.target.id==="tamt")tndUpdate()});
+function markAmt(){const v=parseFloat(($("tamt")||{}).value);document.querySelectorAll('[data-a="amt"]').forEach(b=>b.classList.toggle("on",parseFloat(b.dataset.v)===v))}
+document.addEventListener("input",e=>{if(e.target.id==="tamt"){markAmt();tndUpdate()}});
 // Auto flow: reserve exact amount -> poll until credited / expired.
 async function mkInvoice(){
  const amt=parseFloat($("tamt").value),T=C.TOPUP,el=$("tmsg");el.style.color="#dc2626";
@@ -344,7 +345,7 @@ document.addEventListener("click",async e=>{
   $("buymsg").textContent="";$("buyarea").innerHTML=`<p><b>Confirm purchase of ${esc(p.name)} for ${money(p.price)}?</b></p><div class="row"><button class="btn" data-a="buyno">Cancel</button><button class="btn p" data-a="buy2">Confirm</button></div>`}
  else if(k==="buyno")openProduct(S.buy.id);else if(k==="buy2")doBuy();
  else if(k==="copyel"){const el=$(id);if(el)copy(el.textContent)}
- else if(k==="amt")$("tamt").value=a.dataset.v;
+ else if(k==="amt"){$("tamt").value=a.dataset.v;markAmt();tndUpdate()}
  else if(k==="mkinv")mkInvoice();else if(k==="redeem")redeem();
  else if(k==="meth"){clearInterval(INVT);INV=null;S.meth=id;document.querySelectorAll("#tmeths .chip").forEach(c=>c.classList.toggle("on",c.dataset.id===id));methInfo()}
  else if(k==="order")openOrder(id);
@@ -385,8 +386,22 @@ AV.act.kycphone=async()=>{const TG=(AV.store||{}).telegram_bot,el=$("kycm");
  catch(e){el.style.color="#dc2626";el.textContent=emsg(e)}};
 // Live camera only (no gallery picker). The photo is cropped square, uploaded to the PRIVATE "selfies" bucket and linked by submit_selfie().
 AV.act.kycselfie=async()=>{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return pop("Camera is not available on this device or browser");
- try{KS=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:640},height:{ideal:640}},audio:false})}catch(e){return pop("Please allow camera access to continue")}
- modal(`<h2>Live selfie</h2><p class="en" style="font-size:14px">Look at the camera in good light. We use this only to protect against fraud.</p><div class="pimg wide" style="margin-top:6px"><video id="kv" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video></div><button type="button" class="btn p" data-a="kycsnap">📸 Take photo</button><div style="height:8px"></div><button type="button" class="btn" data-a="kyccancel">Cancel</button><p id="mm" class="au-m" role="status"></p>`);$("kv").srcObject=KS};
+ try{KS=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:720},height:{ideal:720}},audio:false})}catch(e){return pop("Please allow camera access to continue")}
+ modal(`<h2>🪪 Identity selfie</h2><p class="en" style="font-size:14px"><b>Verification step.</b> Center your face in the oval, look straight at the camera, good light, no hat or sunglasses. The photo is taken automatically.</p><div class="selfie"><video id="kv" playsinline autoplay muted></video><div class="oval" id="kov"></div><div class="sh" id="ksh">Looking for your face…</div></div><button type="button" class="btn" data-a="kycsnap" id="ksb" style="display:none">📸 Take photo now</button><div style="height:8px"></div><button type="button" class="btn" data-a="kyccancel">Cancel</button><p id="mm" class="au-m" role="status"></p>`);
+ const v=$("kv");v.srcObject=KS;kycAuto(v)};
+// Auto-capture: FaceDetector (Chrome/Android) needs a face held steady ~1.2s. No support -> 3s countdown + manual button.
+function kycAuto(v){const sh=$("ksh"),ov=$("kov"),FD=window.FaceDetector?new FaceDetector({fastMode:true,maxDetectedFaces:2}):null;let ok=0,t0=Date.now(),done=0;
+ const say=(t,g)=>{if(sh){sh.textContent=t;ov.classList.toggle("ok",!!g)}};
+ if(!FD){$("ksb").style.display="";let n=4;const iv=setInterval(()=>{if(!$("kv")||done)return clearInterval(iv);if(--n<=0){clearInterval(iv);done=1;AV.act.kycsnap()}else say("Hold still… "+n,1)},1000);say("Center your face in the oval");return}
+ const tick=async()=>{if(!$("kv")||done)return;
+  try{if(v.videoWidth){const f=await FD.detect(v);
+   if(f.length>1){ok=0;say("Only one person please")}
+   else if(f.length===1){const b=f[0].boundingBox,r=b.width/v.videoWidth,cx=(b.x+b.width/2)/v.videoWidth,cy=(b.y+b.height/2)/v.videoHeight;
+    if(r<0.28){ok=0;say("Move closer")}else if(r>0.8){ok=0;say("Move back a little")}
+    else if(Math.abs(cx-.5)>.18||Math.abs(cy-.5)>.2){ok=0;say("Center your face in the oval")}
+    else{ok++;say("Perfect, hold still…",1);if(ok>=4){done=1;return AV.act.kycsnap()}}}
+   else{ok=0;say("No face found. Face the camera")}}}catch(e){}
+  if(Date.now()-t0>12000)$("ksb").style.display="";setTimeout(tick,300)};tick()}
 AV.act.kycsnap=async()=>{const v=$("kv");if(!v||!v.videoWidth)return msg("Camera is not ready yet.",true);
  const s=Math.min(v.videoWidth,v.videoHeight),c=document.createElement("canvas");c.width=c.height=Math.min(640,s);c.getContext("2d").drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);
  const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.82));msg("Uploading…");

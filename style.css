@@ -159,3 +159,11 @@ a.btn{text-decoration:none;text-align:center;display:block}.row a.btn{flex:1}.bo
 html[dir=rtl] body{direction:rtl}html[dir=rtl] .tile2,html[dir=rtl] .tx,html[dir=rtl] .item{text-align:right}
 html[dir=rtl] .x{left:14px;right:auto}html[dir=rtl] .bdg{left:8px;right:auto}html[dir=rtl] .pprice s.red{margin-left:0;margin-right:6px}
 html[dir=rtl] .msg.me{align-self:flex-start}html[dir=rtl] .msg:not(.me):not(.sys){align-self:flex-end}html[dir=rtl] .how{padding-left:0;padding-right:20px}
+
+.chip.on{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:600}
+.selfie{position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;background:#000;margin:8px 0}
+.selfie video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.selfie .oval{position:absolute;left:25%;top:12%;width:50%;height:76%;border:3px dashed #fff;border-radius:50%;box-shadow:0 0 0 999px rgba(0,0,0,.45);transition:border-color .2s}
+.selfie .oval.ok{border:3px solid #22c55e}
+.selfie .sh{position:absolute;left:0;right:0;bottom:8px;text-align:center;color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 4px #000}
+.qr{background:#fff;padding:8px;border-radius:12px;display:block;margin:10px auto}
