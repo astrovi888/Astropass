@@ -6,11 +6,11 @@
 (function(){
 "use strict";
 const A=window.AV;if(!A)return;
-let L=localStorage.getItem("av_lang")||(navigator.language||"en").slice(0,2).toLowerCase();if(L!=="fr"&&L!=="ar")L="en";
-A.lang=L;document.documentElement.lang=L;if(L==="ar")document.documentElement.dir="rtl";
+let L=localStorage.getItem("av_lang")||(navigator.language||"en").slice(0,2).toLowerCase();if(L!=="fr"&&L!=="ar"&&L!=="tn")L="en";
+A.lang=L;document.documentElement.lang=(L==="tn"?"ar-TN":L);if(L==="ar"||L==="tn")document.documentElement.dir="rtl";
 // language picker in the footer + account page
 const foot=document.getElementById("foot");
-if(foot)foot.insertAdjacentHTML("beforeend",'<div class="lang">🌐 <select id="lang2" aria-label="Language"><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option></select></div>');
+if(foot)foot.insertAdjacentHTML("beforeend",'<div class="lang">🌐 <select id="lang2" aria-label="Language"><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option><option value="tn">تونسي</option></select></div>');
 const s2=document.getElementById("lang2");if(s2)s2.value=L;
 document.addEventListener("change",e=>{if(e.target.id==="lang"||e.target.id==="lang2"){try{localStorage.setItem("av_lang",e.target.value)}catch(x){}location.reload()}});
 if(L==="en")return;
@@ -128,9 +128,47 @@ const W=[
 ["Instant vs \"On request\"?","Instantané ou « Sur demande » ?","فوري أم «عند الطلب»؟"],["Instant items appear in Orders the moment you pay. \"On request\" items are handled by our team and show their status in Orders.","Les articles instantanés apparaissent dans Commandes dès le paiement. Les articles « Sur demande » sont traités par notre équipe et leur statut s’affiche dans Commandes.","المنتجات الفورية تظهر في الطلبات لحظة الدفع. منتجات «عند الطلب» يعالجها فريقنا وتظهر حالتها في الطلبات."],
 ["My item stopped working.","Mon article ne fonctionne plus.","توقف منتجي عن العمل."],["Open the order and press \"Need help with this order\". We will replace or refund it within the warranty.","Ouvrez la commande et appuyez sur « Besoin d’aide pour cette commande ». Nous le remplaçons ou remboursons dans le cadre de la garantie.","افتح الطلب واضغط «هل تحتاج مساعدة بخصوص هذا الطلب». نستبدله أو نرده ضمن الضمان."],
 ["Why do you need a screenshot?","Pourquoi une capture d’écran ?","لماذا تحتاجون لقطة شاشة؟"],["It protects you and us from fake payments, and it is only visible to the staff who verify it.","Elle nous protège des faux paiements et n’est visible que par l’équipe qui la vérifie.","تحمينا وتحميك من الدفعات المزيفة ولا يراها سوى الموظفين الذين يتحققون منها."],
-["Is this official?","Est-ce officiel ?","هل هذا رسمي؟"],["No. We are an independent reseller and not affiliated with the brands we sell.","Non. Nous sommes un revendeur indépendant, non affilié aux marques vendues.","لا. نحن بائع مستقل وغير تابعين للعلامات التي نبيعها."]
+["Is this official?","Est-ce officiel ?","هل هذا رسمي؟"],["No. We are an independent reseller and not affiliated with the brands we sell.","Non. Nous sommes un revendeur indépendant, non affilié aux marques vendues.","لا. نحن بائع مستقل وغير تابعين للعلامات التي نبيعها."],
+["Live support","Support en direct","دعم مباشر"],
+["Copy amount","Copier le montant","نسخ المبلغ"],
+["✓ Copied","✓ Copié","✓ تم النسخ"],
+["Marketplace","Marché","السوق"],
+["Apply for verification","Demander la vérification","تقديم طلب التوثيق"],
+["Become a seller","Devenir vendeur","كن بائعاً"],
+["Vendor Studio","Espace vendeur","استوديو البائع"],
+["My store","Ma boutique","متجري"],
+["Listings","Annonces","العروض"],
+["Buy","Acheter","شراء"],
+["Confirm purchase","Confirmer l’achat","تأكيد الشراء"],
+["Delivered","Livré","تم التسليم"],
+["Store not found","Boutique introuvable","المتجر غير موجود"],
+["Back to shop","Retour à la boutique","العودة للمتجر"],
+["Sold out.","Épuisé.","نفدت الكمية."],
+["New listing","Nouvelle annonce","عرض جديد"],
+["Publish","Publier","نشر"],
+["Add stock","Ajouter du stock","إضافة مخزون"],
+["Send request","Envoyer la demande","إرسال الطلب"],
+["Apply for the blue check","Demander le badge bleu","طلب العلامة الزرقاء"],
+["Verified seller","Vendeur vérifié","بائع موثّق"],
+["Your account is verified","Votre compte est vérifié","حسابك موثّق"],
+["Verified Instant Delivery","Livraison instantanée vérifiée","تسليم فوري موثّق"],
+["Verified Delivery","Livraison vérifiée","تسليم موثّق"],
+["Expired","Expiré","منتهي"],
+["Every payment is verified before it is added","Chaque paiement est vérifié avant d’être ajouté","يتم التحقق من كل دفعة قبل إضافتها"],
+["Follow the payment details above","Suivez les détails de paiement ci-dessus","اتبع تفاصيل الدفع أعلاه"],
+["Send the exact amount","Envoyez le montant exact","أرسل المبلغ بالضبط"],
+["Come back and send your proof","Revenez envoyer votre preuve","ارجع وأرسل الإثبات"],
+["Open the payment app","Ouvrez l’application de paiement","افتح تطبيق الدفع"],
+["Copy the address below","Copiez l’adresse ci-dessous","انسخ العنوان أدناه"],
+["Open Binance → Pay → Send","Ouvrez Binance → Pay → Envoyer","افتح Binance ← Pay ← Send"],
+["Enter the Pay ID (tap Copy) and send USDT","Saisissez le Pay ID (touchez Copier) et envoyez des USDT","أدخل Pay ID (اضغط نسخ) وأرسل USDT"],
+["Send ONLY the coin shown, on the network shown","Envoyez UNIQUEMENT la crypto indiquée, sur le réseau indiqué","أرسل العملة المعروضة فقط وعلى الشبكة المعروضة"],
+["Copy the account details","Copiez les détails du compte","انسخ تفاصيل الحساب"],
+["Send the exact amount from your bank or D17 app","Envoyez le montant exact depuis votre banque ou D17","أرسل المبلغ بالضبط من بنكك أو D17"],
+["Scan the QR or paste the ID, send the exact amount","Scannez le QR ou collez l’ID, envoyez le montant exact","امسح الرمز أو الصق المعرّف وأرسل المبلغ بالضبط"],
 ];
 const MAP=new Map(W.map(r=>[r[0],r[I]]));
+if(L==="tn"){const TN=[["Shop", "الحانوت"], ["Wallet", "المحفظة"], ["Orders", "الكموندات"], ["Help", "مساعدة"], ["Account", "حسابي"], ["Log in", "ادخل"], ["Add money", "زيد فلوس"], ["＋ Add money", "＋ زيد فلوس"], ["Browse the shop", "شوف الحانوت"], ["My orders", "كموندات متاعي"], ["My orders", "كموندات متاعي"], ["Settings", "الإعدادات"], ["Appearance", "المظهر"], ["Language", "اللغة"], ["Copy", "انسخ"], ["Copy details", "انسخ التفاصيل"], ["Nothing here yet.", "ما ثماش حاجة توا."], ["Loading…", "يحمّل…"], ["Keep shopping", "كمّل الشراء"], ["Renew", "جدّد"], ["Need help with this order?", "تحب مساعدة في الكوموند هاذي؟"], ["Sold out", "خلص"], ["Instant", "فوري"], ["No orders yet", "ما عندك حتى كوموند"], ["Get help", "خذ مساعدة"], ["Wallet · add money", "المحفظة · زيد فلوس"]];TN.forEach(r=>MAP.set(r[0],r[1]));const TN2=[["Live support", "مساعدة مباشرة"], ["Copy amount", "انسخ المبلغ"], ["✓ Copied", "✓ تنسخ"], ["Marketplace", "السوق"], ["Apply for verification", "اطلب التوثيق"], ["Become a seller", "ولّي بايع"], ["Vendor Studio", "ستوديو البايع"], ["My store", "حانوتي"], ["Listings", "العروض"], ["Buy", "اشري"], ["Confirm purchase", "أكّد الشراء"], ["Delivered", "تسلّم"], ["Store not found", "الحانوت موش موجود"], ["Back to shop", "ارجع للمتجر"], ["Sold out.", "خلص."], ["New listing", "عرض جديد"], ["Publish", "انشر"], ["Add stock", "زيد ستوك"], ["Send request", "ابعث الطلب"], ["Apply for the blue check", "اطلب العلامة الزرقاء"], ["Verified seller", "بايع موثّق"], ["Your account is verified", "حسابك موثّق"], ["Verified Instant Delivery", "تسليم فوري مضمون"], ["Verified Delivery", "تسليم مضمون"], ["Expired", "خلص"], ["Every payment is verified before it is added", "كل دفعة تتثبّت قبل ما تتزاد"], ["Follow the payment details above", "اتبع تفاصيل الدفع اللي فوق"], ["Send the exact amount", "ابعث المبلغ بالضبط"], ["Come back and send your proof", "ارجع وابعث الإثبات"], ["Open the payment app", "حلّ تطبيق الدفع"], ["Copy the address below", "انسخ العنوان اللي لتحت"], ["Open Binance → Pay → Send", "حلّ Binance ← Pay ← Send"], ["Enter the Pay ID (tap Copy) and send USDT", "اكتب Pay ID (دز على انسخ) وابعث USDT"], ["Send ONLY the coin shown, on the network shown", "ابعث كان العملة اللي مكتوبة وعلى الشبكة اللي مكتوبة"], ["Copy the account details", "انسخ تفاصيل الحساب"], ["Send the exact amount from your bank or D17 app", "ابعث المبلغ بالضبط من البنك ولا D17"], ["Scan the QR or paste the ID, send the exact amount", "اعمل سكان للـQR ولا حط الـID وابعث المبلغ بالضبط"]];TN2.forEach(r=>MAP.set(r[0],r[1]))}
 // patterns for text with numbers / names inside. $1, $2 = captured parts
 const R=(re,fr,ar)=>[re,[fr,ar]];
 const RX=[
