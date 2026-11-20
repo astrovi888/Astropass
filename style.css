@@ -218,3 +218,18 @@ h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)
 .hero{padding:14px 16px}.hero p{margin:2px 0 4px;font-size:14px}.search{margin-bottom:10px}
 .ctr{text-align:center}.lk{color:var(--mut);font-size:13px}
 .filt{padding:10px 14px;margin:0 0 12px}.filt summary{font-size:14px;color:var(--mut);cursor:pointer}
+
+/* ===== v14 responsive: one layout that fits phone, tablet, laptop, big screen ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;overflow-x:clip}body{overflow-x:clip;min-width:320px}
+img,video,svg{max-width:100%;height:auto}input,select,textarea{font-size:16px;max-width:100%}   /* 16px stops iPhone auto-zoom when you tap a field */
+header{gap:8px;flex-wrap:nowrap}header h1{min-width:0;flex:1 1 auto}.logo{display:flex;align-items:center;gap:8px;min-width:0}#brand{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hr{flex:none;align-items:center}
+.thsw{display:none;height:32px;align-items:center;margin:0 4px 0 0}.thsw button{padding:0;line-height:26px}.thsw i{top:3px}
+@media (min-width:760px){.thsw{display:inline-flex}}
+.pgrid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}.pimg{aspect-ratio:4/3}
+main{width:100%}
+@media (min-width:760px){main{max-width:760px}.pgrid{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:1100px){main{max-width:1100px;padding-inline:28px}.pgrid{grid-template-columns:repeat(4,1fr);gap:14px}
+ #app[data-page=account]>*,#app[data-page=wallet]>*,#app[data-page=support]>*,#app[data-page=orders]>*,#app[data-page=studio]>*,#app[data-page=store]>*{max-width:680px;margin-inline:auto}}
+@media (min-width:1600px){main{max-width:1280px}.pgrid{grid-template-columns:repeat(5,1fr)}}
+@media (max-width:380px){main{padding-inline:12px}.btn{padding-inline:12px}.chip{padding-inline:10px}}
+.bb{padding-inline:max(6px,env(safe-area-inset-left,0px))}

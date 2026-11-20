@@ -21,7 +21,7 @@ document.addEventListener("change",e=>{if(e.target.id==="th")paintSw()});
 // 2) PAGE ENTER animation only on navigation (not on every live refresh)
 const app=$("app");
 function enter(){if(!app||reduce)return;app.classList.remove("enter");void app.offsetWidth;app.classList.add("enter");setTimeout(()=>app.classList.remove("enter"),700)}
-addEventListener("hashchange",enter);
+const pg=()=>{if(app)app.dataset.page=(location.hash.split("/")[1]||"shop").toLowerCase()};pg();addEventListener("hashchange",()=>{pg();enter()});
 
 // 3) SKELETONS: show layout-matched placeholders instantly while a page loads (replaced by the real paint)
 const SK={shop:'<div class="sk l"></div><div class="skgrid"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>',

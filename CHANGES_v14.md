@@ -11,3 +11,6 @@
 - Username login goes through the function (so emails are never exposed). Supabase limits sign-ins per IP; the function uses one server IP, fine for a small shop.
 - Phone number is still added through the existing identity check (D17-type payments). Starter accounts can pay with non-strict methods without it.
 - Next: declutter Wallet and Staff tabs, Telegram notifications (v13 files), refund/dispute flow for vendors.
+
+## v14b responsive
+Header no longer overflows on phones (theme switch only shows on 760px+), product grid 2/3/4/5 columns by screen width, text pages capped at 680px on big screens, 16px inputs (no iPhone zoom), overflow-x clipped. Cumulative files since v11: app.js style.css index.html sw.js i18n.js staff.js ui.js vendor.js accounts.js + Supabase/schema_v11.sql, schema_v13.sql, Functions/auth-helper/index.ts (Telegram v12/v13 files are on hold).
