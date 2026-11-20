@@ -50,24 +50,27 @@ function authUI(m){
  const tabs=`<div class="au-t"><button type="button" data-a="auth" data-m="login" class="${m=="login"?"on":""}">Log in</button><button type="button" data-a="auth" data-m="signup" class="${m=="signup"?"on":""}">Sign up</button></div>`;
  const H=`<div class="au-h">${astroAv(44)}<b>${esc(C.BRAND)}</b></div>`;
  const T={
-  login:`${tabs}<form data-f="login" class="au-f">${f("ae","Email","email","email")}${f("ap","Password","password","current-password")}${go("Log in")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="otp">Email me a code</a><a href="#" data-a="auth" data-m="reset">Forgot password?</a></p>`,
+  login:`${tabs}<form data-f="login" class="au-f">${f("ae","Email or @username","text","username",'autocapitalize="none" spellcheck="false"')}${f("ap","Password","password","current-password")}${go("Log in")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="otp">Email me a code</a><a href="#" data-a="auth" data-m="reset">Forgot password?</a></p>`,
   signup:`${tabs}<form data-f="signup" class="au-f">${f("un","Username (3–20 letters/numbers)","text","username",'maxlength="20"')}${f("ae","Email","email","email")}${f("ap","Password (min 8)","password","new-password",'minlength="8"')}${f("ap2","Confirm password","password","new-password",'minlength="8"')}<label for="uc">Country (optional)</label><select id="uc"><option value="">Prefer not to say</option>${CC.map(c=>`<option value="${c}">${esc(cname(c))}</option>`).join("")}</select><label class="chk"><input type="checkbox" id="adult" required> <span>I am 18 or older.</span></label><label class="chk"><input type="checkbox" id="tos" required> <span>I agree to the Terms and Refund policy (links in the page footer).</span></label>${go("Send me a code")}</form>`,
   otp:`<h2>Log in with a code</h2><form data-f="otp" class="au-f">${f("ae","Email","email","email")}${go("Send code")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
   code:`<h2>Enter your code</h2><p class="en" style="font-size:14px">We sent a code to <b>${esc(PEND&&PEND.email)}</b>. Type it below, or tap the button inside the email.</p><form data-f="code" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="10"')}${go("Confirm")}</form><p class="au-sub"><a href="#" data-a="resend">Resend code</a></p>`,
-  reset:`<h2>Reset password</h2><form data-f="reset" class="au-f">${f("ae","Email","email","email")}${go("Send reset link")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
+  reset:`<h2>Reset password</h2><form data-f="reset" class="au-f">${f("ae","Email or @username","text","username",'autocapitalize="none" spellcheck="false"')}${go("Send reset link")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
   mfa:`<h2>Two-step login</h2><p class="en" style="font-size:14px">Enter the 6-digit code from your authenticator app.</p><form data-f="mfa" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="6"')}${go("Confirm")}</form>`,
-  newpass:`<h2>New password</h2><form data-f="newpass" class="au-f">${f("ap","New password","password","new-password",'minlength="8"')}${go("Save")}</form>`};
+  ucode:`<h2>Enter your code</h2><p class="en" style="font-size:14px">If this account has an email, we sent a code to it. Enter it with your new password.</p><form data-f="ucode" class="au-f">${f("cd","Code","text","one-time-code",'inputmode="numeric" maxlength="10"')}${f("ap","New password (min 8)","password","new-password",'minlength="8"')}${go("Save password")}</form><p class="au-sub"><a href="#" data-a="auth" data-m="login">Back</a></p>`,
+   newpass:`<h2>New password</h2><form data-f="newpass" class="au-f">${f("ap","New password","password","new-password",'minlength="8"')}${go("Save")}</form>`};
  modal(H+T[m]+'<p id="mm" class="au-m" role="status"></p>');const i=$("ae")||$("ap")||$("un")||$("cd");if(i)i.focus();
 }
 // Plain-language versions of Supabase auth errors.
-const friendly=m=>/rate limit/i.test(m)?"Too many emails were sent recently. Please wait a few minutes and try again.":/invalid login/i.test(m)?"Wrong email or password. If you just signed up, confirm your email first.":/not confirmed/i.test(m)?"Please confirm your email first: enter the code we sent, or tap the button in the email.":(/token|otp/i.test(m)&&/expired|invalid/i.test(m))?"That code is wrong or expired. Tap “Resend code” for a new one.":m;
+const friendly=m=>/rate limit/i.test(m)?"Too many emails were sent recently. Please wait a few minutes and try again.":/invalid login/i.test(m)?"Wrong email/username or password. If you just signed up, confirm your email first.":/not confirmed/i.test(m)?"Please confirm your email first: enter the code we sent, or tap the button in the email.":(/token|otp/i.test(m)&&/expired|invalid/i.test(m))?"That code is wrong or expired. Tap “Resend code” for a new one.":m;
 const msg=(t,bad)=>{const m=$("mm");if(m){m.textContent=t;m.style.color=bad?"#dc2626":"var(--mut)"}};
+// Calls the auth-helper edge function (username login, username password reset, admin test accounts).
+const AHF=async(action,body,tok)=>{try{const r=await fetch(C.SUPABASE_URL+"/functions/v1/auth-helper",{method:"POST",headers:{"content-type":"application/json",apikey:C.SUPABASE_KEY,authorization:"Bearer "+(tok||C.SUPABASE_KEY)},body:JSON.stringify(Object.assign({action},body||{}))});const j=await r.json().catch(()=>({}));return Object.assign({ok:r.ok},j)}catch(e){return{ok:false,error:"network"}}};
 async function authSubmit(mode){
  const em=$("ae")?$("ae").value.trim():"",pw=$("ap")?$("ap").value:"",back=location.origin+location.pathname;
- if(mode==="login"&&em&&!em.includes("@"))return msg("Please log in with your email address (not your username).",true);
- msg("Working…");
+  msg("Working…");
  try{let r;
-  if(mode=="login")r=await sb.auth.signInWithPassword({email:em,password:pw});
+  if(mode=="login"&&!em.includes("@")){const j=await AHF("login",{id:em,password:pw});if(!j.session)return msg("Wrong username or password.",true);r=await sb.auth.setSession(j.session)}
+   else if(mode=="login")r=await sb.auth.signInWithPassword({email:em,password:pw});
   else if(mode=="signup"){const un=$("un").value.trim();
    if(!/^[A-Za-z0-9_.-]{3,20}$/.test(un))return msg("Username: 3–20 letters, numbers, . _ -",true);
    if(pw!==$("ap2").value)return msg("Passwords don’t match.",true);
@@ -76,7 +79,9 @@ async function authSubmit(mode){
   else if(mode=="mfa"){const{data:fs}=await sb.auth.mfa.listFactors();const fa=(fs&&fs.totp||[])[0];if(!fa)return msg("No authenticator found.",true);const{data:ch,error:e1}=await sb.auth.mfa.challenge({factorId:fa.id});if(e1)return msg(friendly(e1.message),true);r=await sb.auth.mfa.verify({factorId:fa.id,challengeId:ch.id,code:$("cd").value.trim()})}
   else if(mode=="otp"){r=await sb.auth.signInWithOtp({email:em,options:{shouldCreateUser:false}});if(!r.error){PEND={email:em,type:"email"};return authUI("code")}}
   else if(mode=="code")r=await sb.auth.verifyOtp({email:PEND.email,token:$("cd").value.trim(),type:PEND.type});
-  else if(mode=="reset"){r=await sb.auth.resetPasswordForEmail(em,{redirectTo:back});if(!r.error){PEND={email:em,type:"recovery"};return authUI("code")}}   // reset now uses a CODE too (needs {{ .Token }} in the Reset Password email template)
+  else if(mode=="ucode"){const j=await AHF("reset_finish",{id:PEND&&PEND.id,code:$("cd").value,password:pw});if(!j.ok)return msg("That code is wrong or expired.",true);PEND=null;authUI("login");return msg("Password updated. Log in with your new password.")}
+   else if(mode=="reset"&&!em.includes("@")){await AHF("reset_start",{id:em});PEND={id:em,type:"urecovery"};return authUI("ucode")}
+   else if(mode=="reset"){r=await sb.auth.resetPasswordForEmail(em,{redirectTo:back});if(!r.error){PEND={email:em,type:"recovery"};return authUI("code")}}   // reset now uses a CODE too (needs {{ .Token }} in the Reset Password email template)
   else{r=await sb.auth.updateUser({password:pw});if(!r.error){msg("Password updated.");return setTimeout(closeModal,900)}}
   if(r.error)return msg(friendly(r.error.message),true);if(mode=="code"&&PEND&&PEND.type==="recovery"){PEND=null;return authUI("newpass")}   // code accepted -> choose a new password
   if((mode==="login"||mode==="code")&&sb.auth.mfa){const{data:al}=await sb.auth.mfa.getAuthenticatorAssuranceLevel();if(al&&al.nextLevel==="aal2"&&al.currentLevel!=="aal2")return authUI("mfa")}   // account has two-step login: ask for the code
@@ -146,10 +151,10 @@ document.addEventListener("change",e=>{const i=e.target.id,v=e.target.value;
  if($("pgrid"))$("pgrid").innerHTML=shopGrid()});
 async function shop(t){
  const cats=[{id:"all",label:"All"}].concat(C.CATEGORIES);
- const html=()=>`<div class="box hero">${astroPose("hello",84)}<div><b>${esc(C.BRAND)}</b><p>Subscriptions and game top-ups at friendlier prices.</p>${ST&&ST.completed>0?`<p class="lk">✅ ${ST.completed} orders completed${ST.reviews>0&&ST.positive_pct!=null?" · 👍 "+Math.round(ST.positive_pct)+"% positive":""}</p>`:""}</div></div>
- ${(AV.store||{}).store_open==="0"?'<div class="box warn">⏸️ The store is temporarily closed. You can browse, but purchases are paused.</div>':""}${S.profile&&S.profile.blocked?'<div class="box warn">🔒 Your account is under review. Please contact support.</div>':""}<div class="steps"><div><i>1</i><b>Add money</b><small>to your wallet</small></div><div><i>2</i><b>Pick a product</b><small>and tap Buy</small></div><div><i>3</i><b>Get it</b><small>instantly or in hours</small></div></div>${S.user||localStorage.getItem("av_seen")?"":`<div class="box" style="margin-bottom:10px"><b>New here?</b> <a href="#" data-a="how">See how it works (30 seconds)</a></div>`}
- <div class="trust"><span>🔒 Verified payments</span><span>↩️ Refund if we can’t deliver</span><span>💬 Human support</span></div><input id="sq" class="search" type="search" placeholder="Search products or brands" value="${esc(S.q)}" autocomplete="off">
- <div id="fbar">${filterBar()}</div><div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>`;
+ const html=()=>`${(AV.store||{}).store_open==="0"?'<div class="box warn">⏸️ The store is temporarily closed. You can browse, but purchases are paused.</div>':""}${S.profile&&S.profile.blocked?'<div class="box warn">🔒 Your account is under review. Please contact support.</div>':""}${S.user?"":`<div class="box hero">${astroPose("hello",64)}<div><b>${esc(C.BRAND)}</b><p>Subscriptions and game top-ups at friendlier prices.</p><a href="#" data-a="how">How it works (30 sec)</a></div></div>`}
+  <input id="sq" class="search" type="search" placeholder="Search products or brands" value="${esc(S.q)}" autocomplete="off">
+  <div class="cats" id="cats">${cats.map(c=>`<button class="chip${S.cat===c.id?" on":""}" data-a="cat" data-id="${c.id}">${esc(c.label)}</button>`).join("")}</div><div id="fbar">${filterBar()}</div><div class="pgrid" id="pgrid">${shopGrid()}</div>
+  <p class="lk ctr">🔒 Verified payments · ↩️ Refund if we can’t deliver${ST&&ST.completed>0?" · ✅ "+ST.completed+" orders completed":""}</p>`;
  if(S.catalog.length)paint(t,html());else paint(t,'<div class="box ctr">Loading…</div>');
  try{S.catalog=await rpc("get_catalog");try{ST=await rpc("store_stats")}catch(e){ST=null}paint(t,html())}catch(e){paint(t,`<div class="box ctr">${astroPose("fail",80)}<p>Couldn’t load the shop. ${esc(emsg(e))}</p></div>`)}
 }
@@ -315,18 +320,17 @@ async function openOrder(id){const o=ORD.find(x=>x.id===id);if(!o)return;
 
 // ---------- account ----------
 function account(t){
- if(!S.user)return paint(t,login());const p=S.profile||{};
- paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>${esc(p.username)}</b><div class="lk">${esc(p.email)}${p.user_no?" · ID #"+p.user_no:""}</div></div></div>
- <div class="acc3"><button data-go="wallet"><b>${money(p.balance)}</b><small>Wallet · add money</small></button><button data-go="orders"><b>📦</b><small>My orders</small></button><button data-go="support"><b>💬</b><small>Get help</small></button></div></div>
- <h3>Settings</h3><div class="box"><label for="th">Appearance</label><select id="th"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
- <label for="lang">Language</label><select id="lang"><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option><option value="tn">تونسي</option></select>
+ if(!S.user)return paint(t,login());const p=S.profile||{},th=localStorage.getItem("av_theme")||"auto";
+ paint(t,`<div class="box"><div class="au-h">${astroAv(52)}<div><b>@${esc(p.username)}</b><div class="lk">${p.temp_account?"Starter account · no email yet":esc(p.email)}${p.user_no?" · ID #"+p.user_no:""}</div></div></div></div>
+ ${p.temp_account?'<div class="box warn">👋 Starter account. Add your email, set your own password and pick your @username.</div>':""}
+ <div class="box rows"><button data-go="wallet"><span>👛 Wallet</span><b>${money(p.balance)}</b></button><button data-go="orders"><span>📦 My orders</span><i>›</i></button><button data-go="support"><span>💬 Help</span><i>›</i></button></div>
+ <h3>Profile</h3><div class="box rows"><button data-a="uname"><span>@ Username</span><b>@${esc(p.username)}</b></button><button data-a="email"><span>✉️ Email</span><b>${p.temp_account?"Add":esc(p.email)}</b></button><button data-a="pw"><span>🔑 Password</span><i>›</i></button></div>
+ <h3>Preferences</h3><div class="box"><div class="row"><div><label for="th">Appearance</label><select id="th"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div><label for="lang">Language</label><select id="lang"><option value="en">English</option><option value="fr">Français</option><option value="ar">العربية</option><option value="tn">تونسي</option></select></div></div>
  <label class="chk"><input type="checkbox" id="nt" ${p.notify_email!==false?"checked":""}> <span>Email me order and support updates</span></label></div>
- <h3>Security</h3><div class="box"><p class="en" style="font-size:14px">We never ask for your password or codes. Staff will never message you first asking for them.</p><button class="btn" data-a="pw">Change password</button></div>
- ${p.ref_code?`<h3>Invite friends</h3><div class="box"><p class="en" style="font-size:14px">When a friend joins with your link and completes a first purchase, you both earn AstroCoins.</p><div class="cred" id="refl">${esc(location.origin+location.pathname+"?ref="+p.ref_code)}</div><button class="btn" data-a="copyel" data-id="refl">Copy my link</button></div>`:""}
- <h3>Two-step login</h3><div class="box"><p class="en" style="font-size:14px">Protect your account with a 6-digit code from an authenticator app. Required for staff.</p><div class="row"><button class="btn" data-a="mfa-on">Turn on</button><button class="btn" data-a="mfa-off">Turn off</button></div></div>
- <h3>Learn more</h3><div class="box row"><button class="btn" data-a="how">How it works</button><button class="btn" data-a="faq">FAQ</button><button class="btn" data-a="refunds">Refunds</button></div>
+ <h3>Security</h3><div class="box"><p class="lk">We never ask for your password or codes. Staff will never ask either.</p><div class="row"><button class="btn" data-a="mfa-on">Turn on two-step</button><button class="btn" data-a="mfa-off">Turn off</button></div></div>
+ ${p.ref_code?`<h3>Invite friends</h3><div class="box"><p class="lk">You both earn AstroCoins when a friend completes a first purchase.</p><div class="cred" id="refl">${esc(location.origin+location.pathname+"?ref="+p.ref_code)}</div><button class="btn" data-a="copyel" data-id="refl">Copy my link</button></div>`:""}
  <div style="height:10px"></div><button class="btn" data-a="logout">Log out</button>`);
- $("th").value=localStorage.getItem("av_theme")||"auto";if($("lang"))$("lang").value=(window.AV&&AV.lang)||"en";
+ $("th").value=th;if($("lang"))$("lang").value=(window.AV&&AV.lang)||"en";
 }
 
 // ---------- router ----------
@@ -370,7 +374,7 @@ document.addEventListener("submit",async e=>{
 });
 
 // ---------- plug-in API for support.js and staff.js ----------
-window.AV={C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rpc,emsg,paint,route,V,rank,can,ROLEP,loadProfile,chrome,uuid,pillS,login,act:{},form:{}};
+window.AV={AHF,C,S,sb,$,esc,money,when,pop,copy,sheet,closeSheet,modal,closeModal,rpc,emsg,paint,route,V,rank,can,ROLEP,loadProfile,chrome,uuid,pillS,login,act:{},form:{}};
 // ---------- reviews & product chat (customer actions) ----------
 let RV=null;
 AV.act.rvpick=el=>{RV=el.dataset.v;document.querySelectorAll("[data-a=rvpick]").forEach(b=>b.classList.toggle("p",b===el));$("rvgo").disabled=false};

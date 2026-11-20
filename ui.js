@@ -11,9 +11,9 @@ const modes=["auto","light","dark"],icons={auto:"🖥️",light:"☀️",dark:"�
 const cur=()=>localStorage.getItem("av_theme")||"auto";
 function setTheme(v){try{localStorage.setItem("av_theme",v)}catch(e){}if(v==="auto")delete root.dataset.theme;else root.dataset.theme=v;paintSw();const s=$("th");if(s)s.value=v;
  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=getComputedStyle(root).getPropertyValue("--bg").trim()||"#09090b"}
-function paintSw(){const sw=$("tsw");if(!sw)return;sw.querySelector("i").style.transform="translateX("+(modes.indexOf(cur())*30)+"px)"}
+function paintSw(){const sw=$("thsw");if(!sw)return;sw.querySelector("i").style.transform="translateX("+(modes.indexOf(cur())*30)+"px)"}
 const hr=document.querySelector(".hr");
-if(hr&&!$("tsw")){const d=document.createElement("div");d.className="tsw";d.id="tsw";d.setAttribute("role","group");d.setAttribute("aria-label","Theme");
+if(hr&&!$("thsw")){const d=document.createElement("div");d.className="thsw";d.id="thsw";d.setAttribute("role","group");d.setAttribute("aria-label","Theme");
  d.innerHTML="<i></i>"+modes.map(m=>`<button type="button" data-th="${m}" aria-label="${m}">${icons[m]}</button>`).join("");hr.prepend(d);paintSw();
  d.addEventListener("click",e=>{const b=e.target.closest("[data-th]");if(b)setTheme(b.dataset.th)})}
 document.addEventListener("change",e=>{if(e.target.id==="th")paintSw()});

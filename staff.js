@@ -25,7 +25,7 @@ V.staff=async t=>{
  if(A.can("topups"))n.topups=await cnt(sb.from("topup_requests").select("id",{count:"exact",head:true}).eq("status","pending"));
  if(A.extraCounts)await A.extraCounts(n);
  const todo=[n.topups&&n.topups+" payment(s) to verify",n.orders&&n.orders+" order(s) to fulfil",n.queue&&n.queue+" ticket(s) waiting",n.security&&n.security+" security alert(s)"].filter(Boolean);
- paint(t,`<h2>Staff</h2><form data-f="usearch" class="sfind"><input id="uq" placeholder="🔎 Find a customer: username, email or ID" required autocomplete="off"><button class="btn p">Find</button></form><div id="ures"></div>
+ paint(t,`<h2>Staff</h2><form data-f="usearch" class="sfind"><input id="uq" placeholder="🔎 Find a customer: @username, email or ID" required autocomplete="off"><button class="btn p">Find</button></form><div id="ures"></div>
   <p class="en">${todo.length?"Needs you now: "+todo.join(" · "):"✅ Nothing is waiting for you."}</p>
   <div class="tiles">${tabs.map(x=>`<button class="tile2" data-a="stab" data-id="${x[0]}">${n[x[0]]?`<i class="bdg">${n[x[0]]}</i>`:""}<span class="ti">${x[3]}</span><b>${x[1]}</b><small>${x[4]}</small></button>`).join("")}</div>`);
 };
@@ -203,7 +203,7 @@ act.qamt=el=>{$("ca").value=el.dataset.v};
 form.cadj=async f=>{const a=parseFloat($("ca").value);if(!a)return;if(!confirm((a>0?"Add ":"Remove ")+money(Math.abs(a))+" to this wallet?"))return;
  try{await rpc("admin_adjust_balance",{p_user_id:f.dataset.id,p_amount:a,p_note:$("cn2").value});pop("Wallet updated");act.ucard({dataset:{id:f.dataset.id}})}catch(e){pop(emsg(e))}};
 form.usearch=async()=>{const q=$("uq").value.replace(/[^\w@.+\- ]/g,"").trim();
- const{data,error}=await sb.from("profiles").select("id,username,email,balance,role,coins,perm_grants,perm_revokes,user_no").or(`username.ilike.%${q}%,email.ilike.%${q}%${/^\d{4,}$/.test(q)?`,user_no.eq.${q}`:""}`).limit(10);UR=data||[];
+ const{data,error}=await sb.from("profiles").select("id,username,email,balance,role,coins,perm_grants,perm_revokes,user_no").or(`username.ilike.%${q.replace(/^@/,"")}%,email.ilike.%${q}%${/^\d{4,}$/.test(q)?`,user_no.eq.${q}`:""}`).limit(10);UR=data||[];
  $("ures").innerHTML=error?"<p class=neg>Error</p>":UR.map(ucard).join("")||"<p class=en>No match.</p>"};
 const U=id=>UR.find(u=>u.id===id)||TEAM.find(u=>u.id===id);
 act.uadj=el=>{const u=U(el.dataset.id);sheet(`${X}<h2>Wallet: @${esc(u.username)}</h2><p>Balance now ${money(u.balance)}. Use a minus sign to remove money.</p><form data-f="uadj" data-id="${u.id}"><label for="am">Amount (USD)</label><input id="am" type="number" step="0.01" required><label for="an">Note (shown to the customer)</label><input id="an" maxlength="200" value="Top-up"><div style="height:12px"></div><button class="btn p">Apply</button></form>`)};

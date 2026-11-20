@@ -184,9 +184,9 @@ body{font-family:var(--sans);-webkit-font-smoothing:antialiased;background-image
 @media (min-width:760px){.sh-box{top:50%;bottom:auto;transform:translateY(-50%);border-radius:22px;border-bottom:1px solid var(--bd);max-width:480px;max-height:86vh}#sheet.on .sh-box{animation:v11pop .45s var(--spring)}}
 @keyframes v11pop{from{opacity:0;transform:translateY(-46%) scale(.96)}to{opacity:1;transform:translateY(-50%) scale(1)}}
 /* header theme switch with sliding thumb */
-.tsw{position:relative;display:inline-flex;border:1px solid var(--bd);border-radius:999px;padding:2px;margin:0 6px 6px 0;background:var(--card)}
-.tsw button{position:relative;z-index:1;border:0;background:none;font-size:14px;width:30px;height:26px;cursor:pointer;border-radius:999px;color:var(--fg)}
-.tsw i{position:absolute;top:2px;inset-inline-start:2px;width:30px;height:26px;border-radius:999px;background:var(--soft2);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .45s var(--spring)}
+.thsw{position:relative;display:inline-flex;border:1px solid var(--bd);border-radius:999px;padding:2px;margin:0 6px 6px 0;background:var(--card)}
+.thsw button{position:relative;z-index:1;border:0;background:none;font-size:14px;width:30px;height:26px;cursor:pointer;border-radius:999px;color:var(--fg)}
+.thsw i{position:absolute;top:2px;inset-inline-start:2px;width:30px;height:26px;border-radius:999px;background:var(--soft2);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .45s var(--spring)}
 /* sliding pill under category chips */
 .cats{position:relative}.cats .cpill{position:absolute;top:0;bottom:4px;border-radius:10px;background:var(--ac);transition:transform .45s var(--spring),width .45s var(--spring);pointer-events:none;z-index:0}
 .cats.has-pill .chip{position:relative;z-index:1;background:transparent;border-color:transparent}.cats.has-pill .chip.on{color:var(--acf);background:transparent;border-color:transparent}
@@ -211,3 +211,10 @@ body{font-family:var(--sans);-webkit-font-smoothing:antialiased;background-image
 .vstore h2{display:flex;align-items:center;flex-wrap:wrap}.vgrid{display:grid;gap:10px}.vtag{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
 textarea.sec{font-family:var(--mono);font-size:13px}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* v13: calmer, list-style layout */
+.rows{padding:2px 16px}.rows button{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:14px 0;background:none;border:0;border-bottom:1px solid var(--bd);font:inherit;color:var(--fg);cursor:pointer;text-align:start}.rows button:last-child{border-bottom:0}.rows b{color:var(--mut);font-weight:500;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rows i{font-style:normal;color:var(--mut);font-size:20px}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:22px 4px 8px;font-weight:600}
+.hero{padding:14px 16px}.hero p{margin:2px 0 4px;font-size:14px}.search{margin-bottom:10px}
+.ctr{text-align:center}.lk{color:var(--mut);font-size:13px}
+.filt{padding:10px 14px;margin:0 0 12px}.filt summary{font-size:14px;color:var(--mut);cursor:pointer}
